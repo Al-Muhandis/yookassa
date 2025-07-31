@@ -71,7 +71,7 @@ begin
   except
     on E: Exception do RaisedError := True;
   end;
-  AssertTrue('Должно возникнуть исключение при ошибке Юкассы', RaisedError);
+  AssertTrue('There should be an exception in case of a YooKassa error.', RaisedError);
 end;
 
 initialization

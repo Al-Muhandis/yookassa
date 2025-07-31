@@ -29,6 +29,10 @@
         <Filename Value="test_yookassa_api_console.lpr"/>
         <IsPartOfProject Value="True"/>
       </Unit>
+      <Unit>
+        <Filename Value="..\yookassa_api.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit>
     </Units>
   </ProjectOptions>
   <CompilerOptions>
@@ -38,6 +42,7 @@
       <Filename Value="test_yookassa_api_console"/>
     </Target>
     <SearchPaths>
+      <OtherUnitFiles Value=".."/>
       <UnitOutputDirectory Value="lib\$(TargetCPU)-$(TargetOS)"/>
     </SearchPaths>
   </CompilerOptions>

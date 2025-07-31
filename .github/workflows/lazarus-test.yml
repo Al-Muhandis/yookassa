@@ -32,10 +32,10 @@ jobs:
       - name: Build unit test executable
         working-directory: tests
         run: |
-          lazbuild test_yookassa_api_console.lpi -a
+          lazbuild test_yookassa_api_console.lpi
 
       - name: Run unit tests
         working-directory: tests
         run: |
           chmod +x ./test_yookassa_api_console
-          ./test_yookassa_api_console
+          ./test_yookassa_api_console -a

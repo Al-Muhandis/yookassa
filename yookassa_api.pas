@@ -36,6 +36,10 @@ type
 
 implementation
 
+uses
+  opensslsockets
+  ;
+
 var
   _FrmtStngsJSON: TFormatSettings;
 

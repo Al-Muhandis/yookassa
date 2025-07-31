@@ -1,0 +1,41 @@
+name: Lazarus/FreePascal Tests
+
+on:
+  push:
+    paths:
+      - '**.pas'
+      - '**.lpr'
+      - '**.inc'
+      - '**.ini'
+      - '.github/workflows/lazarus-test.yml'
+  pull_request:
+    paths:
+      - '**.pas'
+      - '**.lpr'
+      - '**.inc'
+      - '**.ini'
+      - '.github/workflows/lazarus-test.yml'
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install FreePascal and Lazarus
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y lazarus
+
+      - name: Build unit test executable
+        working-directory: tests
+        run: |
+          lazbuild test_yookassa_api_console.lpi
+
+      - name: Run unit tests
+        working-directory: tests
+        run: |
+          chmod +x ./test_yookassa_api_console
+          ./test_yookassa_api_console -a

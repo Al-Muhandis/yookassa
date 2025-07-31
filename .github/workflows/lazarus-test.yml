@@ -32,7 +32,7 @@ jobs:
       - name: Build unit test executable
         working-directory: tests
         run: |
-          lazbuild test_yookassa_api_console.lpi
+          lazbuild test_yookassa_api_console.lpi -a
 
       - name: Run unit tests
         working-directory: tests

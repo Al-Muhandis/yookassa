@@ -5,7 +5,7 @@ unit test_yookassa_api_integration;
 interface
 
 uses
-  Classes, SysUtils, fpcunit, testregistry, yookassa_api
+  Classes, SysUtils, fpcunit, testregistry, fpjson, yookassa_api
   ;
 
 type
@@ -14,7 +14,12 @@ type
 
   TTestYooKassaIntegration = class(TTestCase)
   private
-    procedure LoadConfig(aPayment: TYookassaPayment);
+    FResp: TJSONObject;
+    FYookassaAPI: TYookassaPayment;
+    class procedure LoadConfig(aPayment: TYookassaPayment);
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
   published
     procedure TestCreatePayment_Sandbox;
     procedure TestCreatePaymentWithReceipt_Sandbox;
@@ -26,7 +31,7 @@ uses
   IniFiles
   ;
 
-procedure TTestYooKassaIntegration.LoadConfig(aPayment: TYookassaPayment);
+class procedure TTestYooKassaIntegration.LoadConfig(aPayment: TYookassaPayment);
 var
   aIni: TIniFile;
 begin
@@ -43,25 +48,38 @@ begin
   end;
 end;
 
+procedure TTestYooKassaIntegration.SetUp;
+begin
+  inherited SetUp;
+  FYookassaAPI:=TYookassaPayment.Create;
+end;
+
+procedure TTestYooKassaIntegration.TearDown;
+var
+  aFile: TStringList;
+begin
+  if Assigned(FResp) then
+  begin
+    aFile:=TStringList.Create;
+    try
+      aFile.Text:=FResp.FormatJSON();
+      aFile.SaveToFile('~response.json');
+    finally              
+      aFile.Free;
+    end;
+  end;
+  FResp.Free;
+  FYookassaAPI.Free;
+  inherited TearDown;
+end;
+
 procedure TTestYooKassaIntegration.TestCreatePayment_Sandbox;
 var
   aConfirmationURL: String;
-
-  procedure CreatePayment;
-  var
-    aPayment: TYookassaPayment;
-  begin
-    aPayment := TYookassaPayment.Create;
-    try
-      LoadConfig(aPayment);
-      aConfirmationURL := aPayment.CreatePayment;
-    finally
-      aPayment.Free;
-    end;
-  end;
-
 begin
-  CreatePayment;
+  LoadConfig(FYookassaAPI);
+  FResp := FYookassaAPI.CreatePayment;
+  aConfirmationURL:=FYookassaAPI.ParseJSONResp(FResp);
   AssertTrue('confirmation_url must be exists', Pos('http', aConfirmationURL) = 1);
 end;
 
@@ -69,40 +87,27 @@ end;
 procedure TTestYooKassaIntegration.TestCreatePaymentWithReceipt_Sandbox;
 var
   aConfirmationURL: String;
-
-  procedure CreatePaymentWithReceipt;
-  var
-    aPayment: TYookassaPayment;
-    aReceipt: TYookassaReceipt;
-    aItem: TYookassaReceiptItem;
-  begin
-    aPayment := TYookassaPayment.Create;
-    try
-      LoadConfig(aPayment);
-      aReceipt := TYookassaReceipt.Create;
-      aReceipt.CustomerEmail := 'user@example.com';
-
-      aItem := TYookassaReceiptItem.Create;
-      aItem.Description := 'Тестовый товар';
-      aItem.Quantity := 1;
-      aItem.AmountValue := aPayment.Amount;
-      aItem.AmountCurrency := aPayment.Currency;
-      aItem.VatCode := 1;
-      aItem.PaymentMode := 'full_prepayment';
-      aItem.PaymentSubject := 'commodity';
-      aReceipt.AddItem(aItem);
-
-      aPayment.Receipt := aReceipt;
-
-      aConfirmationURL := aPayment.CreatePayment;
-
-    finally
-      aPayment.Free;
-    end;
-  end;
-
+  aReceipt: TYookassaReceipt;
+  aItem: TYookassaReceiptItem;
 begin
-  CreatePaymentWithReceipt;
+  LoadConfig(FYookassaAPI);
+  aReceipt := TYookassaReceipt.Create;
+  aReceipt.CustomerEmail := 'user@example.com';
+
+  aItem := TYookassaReceiptItem.Create;
+  aItem.Description := 'Тестовый товар';
+  aItem.Quantity := 1;
+  aItem.AmountValue := FYookassaAPI.Amount;
+  aItem.AmountCurrency := FYookassaAPI.Currency;
+  aItem.VatCode := 1;
+  aItem.PaymentMode := 'full_prepayment';
+  aItem.PaymentSubject := 'commodity';
+  aReceipt.AddItem(aItem);
+
+  FYookassaAPI.Receipt := aReceipt;
+
+  FResp := FYookassaAPI.CreatePayment;
+  aConfirmationURL:=FYookassaAPI.ParseJSONResp(FResp);
   AssertTrue('confirmation_url must be exists', Pos('http', aConfirmationURL) = 1);
 end;
 

@@ -13,6 +13,11 @@ type
   { TTestYooKassa }
 
   TTestYooKassa = class(TTestCase)
+  private
+    FYookassaAPI: TYookassaPayment;
+  protected
+    procedure SetUp; override;
+    procedure TearDown; override;
   published
     procedure TestBuildRequestData;
     procedure TestParseSuccessResponse;
@@ -27,35 +32,41 @@ uses
   fpjson
   ;
 
+procedure TTestYooKassa.SetUp;
+begin
+  FYookassaAPI:=TYookassaPayment.Create;
+  inherited SetUp;
+end;
+
+procedure TTestYooKassa.TearDown;
+begin
+  FYookassaAPI.Free;
+  inherited TearDown;
+end;
+
 procedure TTestYooKassa.TestBuildRequestData;
 var
-  aPayment: TYookassaPayment;
   aJSON: String;
 begin
-  aPayment:=TYookassaPayment.Create;
-  try
-    aPayment.Amount := 123.45;
-    aPayment.Currency := 'RUB';
-    aPayment.Description := 'Test payment';
-    aJSON := aPayment.BuildPaymentJSON;
-  finally
-      aPayment.Free;
-  end;
+  FYookassaAPI.Amount := 123.45;
+  FYookassaAPI.Currency := 'RUB';
+  FYookassaAPI.Description := 'Test payment';
+  aJSON:=FYookassaAPI.BuildPaymentJSON;
   AssertTrue(Pos('"amount"', aJSON) > 0);
   AssertTrue(Pos('"value" : "123.45"', aJSON) > 0);
 end;
 
 procedure TTestYooKassa.TestParseSuccessResponse;
 var
-  aJSON, aConfirmationURL: String;
-  aPayment: TYookassaPayment;
+  aConfirmationURL: String;
+  aJSON: TJSONObject;
 begin
-  aJSON := '{"id":"pay_123","status":"pending","confirmation":{"type":"redirect","confirmation_url":"https://pay.test"}}';
-  aPayment:=TYookassaPayment.Create;
+  aJSON := TJSONObject(GetJSON(
+    '{"id":"pay_123","status":"pending","confirmation":{"type":"redirect","confirmation_url":"https://pay.test"}}'));
   try
-    aConfirmationURL := aPayment.ParseJSONResp(aJSON);
+    aConfirmationURL := FYookassaAPI.ParseJSONResp(aJSON);
   finally
-    aPayment.Free;
+    aJSON.Free;
   end;
   //AssertEquals('pay_123', Resp.ID);
   //AssertEquals('pending', Resp.Status);
@@ -64,21 +75,19 @@ end;
 
 procedure TTestYooKassa.TestParseErrorResponse;
 var
-  aJSON: String;
   RaisedError: Boolean;
-  aPayment: TYookassaPayment;
+  aJSON: TJSONObject;
 begin
-  aJSON := '{"type":"error","code":"invalid_request"}';
-  RaisedError := False;
+  RaisedError := False;                                                          
+  aJSON := TJSONObject(GetJSON('{"type":"error","code":"invalid_request"}'));
   try
-    aPayment:=TYookassaPayment.Create;
     try
-      aPayment.ParseJSONResp(aJSON);
-    finally
-      aPayment.Free;
+      FYookassaAPI.ParseJSONResp(aJSON);
+    except
+      on E: Exception do RaisedError := True;
     end;
-  except
-    on E: Exception do RaisedError := True;
+  finally
+    aJSON.Free;
   end;
   AssertTrue('There should be an exception in case of a YooKassa error.', RaisedError);
 end;

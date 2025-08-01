@@ -51,10 +51,14 @@ type
 
     FReceipt: TYookassaReceipt;
     FMetaOrderId: string;
-    function DoCreatePayment: string;
+    function DoCreatePayment: TJSONObject;
   public
     function BuildPaymentJSON: String;
-    function ParseJSONResp(const aResp: String): String;
+    function CreatePayment: TJSONObject;
+    class function CreatePayment(const aShopId, aSecretKey: string;
+      aAmount: Currency; const aCurrency, aDescription, aReturnUrl: string): string;
+    destructor Destroy; override;
+    class function ParseJSONResp(const aResp: TJSONObject): String;
     property ShopId: string read FShopId write FShopId;
     property SecretKey: string read FSecretKey write FSecretKey;
     property Amount: Currency read FAmount write FAmount;
@@ -62,11 +66,7 @@ type
     property Description: string read FDescription write FDescription;
     property ReturnUrl: string read FReturnUrl write FReturnUrl;
     property Receipt: TYookassaReceipt read FReceipt write FReceipt;
-    property MetaOrderId: string read FMetaOrderId write FMetaOrderId; // Для metadata.order_id
-    function CreatePayment: string;
-    class function CreatePayment(const aShopId, aSecretKey: string;
-      aAmount: Currency; const aCurrency, aDescription, aReturnUrl: string): string;
-    destructor Destroy; override;
+    property MetaOrderId: string read FMetaOrderId write FMetaOrderId;
   end;
 
 implementation
@@ -156,13 +156,13 @@ begin
   inherited Destroy;
 end;
 
-function TYookassaPayment.DoCreatePayment: string;
+function TYookassaPayment.DoCreatePayment: TJSONObject;
 var
   aHttp: TFPHttpClient;
   aAuth: string;
   aRespStr: RawByteString;
 begin
-  Result := '';
+  Result := nil;
   aHttp := TFPHttpClient.Create(nil);
   try
     aAuth := EncodeStringBase64(FShopId + ':' + FSecretKey);
@@ -175,7 +175,7 @@ begin
     finally
       aHTTP.RequestBody.Free;
     end;
-    Result:=ParseJSONResp(aRespStr)
+    Result:=TJSONObject(GetJSON(aRespStr));
   finally
     aHttp.Free;
   end;
@@ -221,28 +221,22 @@ begin
   end;
 end;
 
-function TYookassaPayment.ParseJSONResp(const aResp: String): String;
+class function TYookassaPayment.ParseJSONResp(const aResp: TJSONObject): String;
 var
-  aJsonResp: TJSONObject;
   aPaymentUrl: TJSONStringType;
 begin
-  aJsonResp := TJSONObject(GetJSON(aResp));
-  try
-    if aJsonResp.FindPath('confirmation.confirmation_url') <> nil then
-      aPaymentUrl := aJsonResp.FindPath('confirmation.confirmation_url').AsString
-    else if aJsonResp.Find('confirmation') <> nil then
-      aPaymentUrl := aJsonResp.Objects['confirmation'].Get('confirmation_url', '')
-    else
-      aPaymentUrl := '';
-    if aPaymentUrl = '' then
-      raise Exception.Create('No confirmation_url in Yookassa response: ' + aResp);
-    Result := aPaymentUrl;
-  finally
-    aJsonResp.Free;
-  end;
+  if aResp.FindPath('confirmation.confirmation_url') <> nil then
+    aPaymentUrl := aResp.FindPath('confirmation.confirmation_url').AsString
+  else if aResp.Find('confirmation') <> nil then
+    aPaymentUrl := aResp.Objects['confirmation'].Get('confirmation_url', '')
+  else
+    aPaymentUrl := '';
+  if aPaymentUrl = '' then
+    raise Exception.Create('No confirmation_url in Yookassa response: ' + aResp.AsJSON);
+  Result := aPaymentUrl;
 end;
 
-function TYookassaPayment.CreatePayment: string;
+function TYookassaPayment.CreatePayment: TJSONObject;
 begin
   Result := DoCreatePayment;
 end;
@@ -250,19 +244,25 @@ end;
 class function TYookassaPayment.CreatePayment(const aShopId, aSecretKey: string;
   aAmount: Currency; const aCurrency, aDescription, aReturnUrl: string): string;
 var
-  Payment: TYookassaPayment;
+  aPayment: TYookassaPayment;
+  aResp: TJSONObject;
 begin
-  Payment := TYookassaPayment.Create;
+  aPayment := TYookassaPayment.Create;
   try
-    Payment.FShopId := aShopId;
-    Payment.FSecretKey := aSecretKey;
-    Payment.FAmount := aAmount;
-    Payment.FCurrency := aCurrency;
-    Payment.FDescription := aDescription;
-    Payment.FReturnUrl := aReturnUrl;
-    Result := Payment.DoCreatePayment;
+    aPayment.FShopId := aShopId;
+    aPayment.FSecretKey := aSecretKey;
+    aPayment.FAmount := aAmount;
+    aPayment.FCurrency := aCurrency;
+    aPayment.FDescription := aDescription;
+    aPayment.FReturnUrl := aReturnUrl;
+    aResp := aPayment.DoCreatePayment;
+    try
+      Result:=aPayment.ParseJSONResp(aResp);
+    finally
+      aResp.Free;
+    end;
   finally
-    Payment.Free;
+    aPayment.Free;
   end;
 end;
 

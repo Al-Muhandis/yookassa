@@ -5,7 +5,8 @@ unit yookassa_api;
 interface
 
 uses
-  Classes, SysUtils, fpjson, jsonparser, fphttpclient, base64;
+  Classes, SysUtils, fpjson, jsonparser, fphttpclient, base64, fgl
+  ;
 
 type
   { Base class for request at YooKassa API }
@@ -48,12 +49,14 @@ type
     function ToJSON: TJSONObject;
   end;
 
+  TReceiptItems = specialize TFPGObjectList<TYookassaReceiptItem>;
+
   { TYookassaReceipt }
   TYookassaReceipt = class
   private
     FCustomerEmail: string;
     FCustomerPhone: string;
-    FItems: TList;
+    FItems: TReceiptItems;
     FTaxSystemCode: Integer;
   public
     constructor Create;
@@ -63,7 +66,7 @@ type
     function ToReceiptJSON: TJSONObject; // to create a receipt separately
     property CustomerEmail: String read FCustomerEmail write FCustomerEmail;
     property CustomerPhone: String read FCustomerPhone write FCustomerPhone;
-    property Items: TList read FItems write FItems;
+    property Items: TReceiptItems read FItems write FItems;
     property TaxSystemCode: Integer read FTaxSystemCode write FTaxSystemCode;
   end;
 
@@ -262,16 +265,12 @@ end;
 
 constructor TYookassaReceipt.Create;
 begin
-  Items := TList.Create;
+  Items := TReceiptItems.Create(True);
   FTaxSystemCode := -1; // not specified
 end;
 
 destructor TYookassaReceipt.Destroy;
-var
-  i: Integer;
 begin
-  for i := 0 to Items.Count - 1 do
-    TObject(Items[i]).Free;
   FItems.Free;
   inherited Destroy;
 end;
@@ -286,7 +285,7 @@ var
   aJson: TJSONObject;
   aItems: TJSONArray;
   aCustomer: TJSONObject;
-  i: Integer;
+  Item: TYookassaReceiptItem;
 begin
   aJson := TJSONObject.Create;
   
@@ -300,8 +299,8 @@ begin
   
   // items
   aItems := TJSONArray.Create;
-  for i := 0 to Items.Count - 1 do
-    aItems.Add(TYookassaReceiptItem(Items[i]).ToJSON);
+  for Item in FItems do
+    aItems.Add(Item.ToJSON);
   aJson.Add('items', aItems);
   
   // tax_system_code

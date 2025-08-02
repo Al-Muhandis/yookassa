@@ -15,6 +15,7 @@ type
   TTestYooKassa = class(TTestCase)
   private
     FYookassaAPI: TYookassaPayment;
+    FReceiptRequest: TYookassaReceiptRequest;
   protected
     procedure SetUp; override;
     procedure TearDown; override;
@@ -24,6 +25,15 @@ type
     procedure TestParseErrorResponse;
     procedure TestReceiptItemToJSON;
     procedure TestReceiptToJSON;
+    procedure TestReceiptWithPhoneToJSON;
+    procedure TestReceiptWithTaxSystemCodeToJSON;
+    procedure TestReceiptRequestBuildJSON;
+    procedure TestReceiptRequestBuildRefundJSON;
+    procedure TestReceiptRequestParseSuccessResponse;
+    procedure TestReceiptRequestParseErrorResponse;
+    procedure TestReceiptRequestCreate;
+    procedure TestReceiptItemMarkCodeInfo;
+    procedure TestReceiptEmptyCustomer;
   end;
 
 implementation
@@ -34,13 +44,15 @@ uses
 
 procedure TTestYooKassa.SetUp;
 begin
-  FYookassaAPI:=TYookassaPayment.Create;
+  FYookassaAPI := TYookassaPayment.Create;
+  FReceiptRequest := TYookassaReceiptRequest.Create;
   inherited SetUp;
 end;
 
 procedure TTestYooKassa.TearDown;
 begin
   FYookassaAPI.Free;
+  FReceiptRequest.Free;
   inherited TearDown;
 end;
 
@@ -51,7 +63,7 @@ begin
   FYookassaAPI.Amount := 123.45;
   FYookassaAPI.Currency := 'RUB';
   FYookassaAPI.Description := 'Test payment';
-  aJSON:=FYookassaAPI.BuildPaymentJSON;
+  aJSON := FYookassaAPI.BuildPaymentJSON;
   AssertTrue(Pos('"amount"', aJSON) > 0);
   AssertTrue(Pos('"value" : "123.45"', aJSON) > 0);
 end;
@@ -68,8 +80,6 @@ begin
   finally
     aJSON.Free;
   end;
-  //AssertEquals('pay_123', Resp.ID);
-  //AssertEquals('pending', Resp.Status);
   AssertEquals('https://pay.test', aConfirmationURL);
 end;
 
@@ -78,7 +88,7 @@ var
   RaisedError: Boolean;
   aJSON: TJSONObject;
 begin
-  RaisedError := False;                                                          
+  RaisedError := False;
   aJSON := TJSONObject(GetJSON('{"type":"error","code":"invalid_request"}'));
   try
     try
@@ -155,6 +165,254 @@ begin
       AssertEquals(1, aItems.Count);
       AssertEquals('Позиция 1', TJSONObject(aItems.Objects[0]).Strings['description']);
       AssertEquals(100.00, TJSONObject(TJSONObject(aItems.Objects[0]).Objects['amount']).Floats['value']);
+    finally
+      aJSON.Free;
+    end;
+  finally
+    aReceipt.Free;
+  end;
+end;
+
+// ========== НОВЫЕ ТЕСТЫ ДЛЯ ФУНКЦИОНАЛА ЧЕКОВ ==========
+
+procedure TTestYooKassa.TestReceiptWithPhoneToJSON;
+var
+  aReceipt: TYookassaReceipt;
+  aItem: TYookassaReceiptItem;
+  aJSON: TJSONObject;
+  aCustomer: TJSONObject;
+begin
+  aReceipt := TYookassaReceipt.Create;
+  try
+    aReceipt.CustomerEmail := 'user@example.com';
+    aReceipt.CustomerPhone := '+79001234567';
+
+    aItem := TYookassaReceiptItem.Create;
+    aItem.Description := 'Товар с телефоном';
+    aItem.Quantity := 1;
+    aItem.AmountValue := 50.00;
+    aItem.AmountCurrency := 'RUB';
+    aItem.VatCode := 1;
+    aReceipt.AddItem(aItem);
+
+    aJSON := aReceipt.ToJSON;
+    try
+      AssertTrue(aJSON.Find('customer') <> nil);
+      aCustomer := TJSONObject(aJSON.Objects['customer']);
+      AssertEquals('user@example.com', aCustomer.Strings['email']);
+      AssertEquals('+79001234567', aCustomer.Strings['phone']);
+    finally
+      aJSON.Free;
+    end;
+  finally
+    aReceipt.Free;
+  end;
+end;
+
+procedure TTestYooKassa.TestReceiptWithTaxSystemCodeToJSON;
+var
+  aReceipt: TYookassaReceipt;
+  aItem: TYookassaReceiptItem;
+  aJSON: TJSONObject;
+begin
+  aReceipt := TYookassaReceipt.Create;
+  try
+    aReceipt.CustomerEmail := 'user@example.com';
+    aReceipt.TaxSystemCode := 1; // УСН доходы
+
+    aItem := TYookassaReceiptItem.Create;
+    aItem.Description := 'Товар с налогом';
+    aItem.Quantity := 1;
+    aItem.AmountValue := 200.00;
+    aItem.AmountCurrency := 'RUB';
+    aItem.VatCode := 2;
+    aReceipt.AddItem(aItem);
+
+    aJSON := aReceipt.ToJSON;
+    try
+      AssertEquals(1, aJSON.Integers['tax_system_code']);
+    finally
+      aJSON.Free;
+    end;
+  finally
+    aReceipt.Free;
+  end;
+end;
+
+procedure TTestYooKassa.TestReceiptRequestBuildJSON;
+var
+  aItem: TYookassaReceiptItem;
+  aJSON: String;
+  aParsedJSON: TJSONObject;
+begin
+  FReceiptRequest.Receipt.CustomerEmail := 'test@example.com';
+
+  aItem := TYookassaReceiptItem.Create;
+  aItem.Description := 'Тестовый товар';
+  aItem.Quantity := 1;
+  aItem.AmountValue := 100.00;
+  aItem.AmountCurrency := 'RUB';
+  aItem.VatCode := 1;
+  FReceiptRequest.Receipt.AddItem(aItem);
+
+  FReceiptRequest.ReceiptType := 'payment';
+  FReceiptRequest.Send := True;
+
+  aJSON := FReceiptRequest.BuildReceiptJSON;
+  aParsedJSON := TJSONObject(GetJSON(aJSON));
+  try
+    AssertEquals('payment', aParsedJSON.Strings['type']);
+    AssertEquals(True, aParsedJSON.Booleans['send']);
+    AssertTrue(aParsedJSON.Find('receipt') <> nil);
+  finally
+    aParsedJSON.Free;
+  end;
+end;
+
+procedure TTestYooKassa.TestReceiptRequestBuildRefundJSON;
+var
+  aItem: TYookassaReceiptItem;
+  aJSON: String;
+  aParsedJSON: TJSONObject;
+begin
+  FReceiptRequest.Receipt.CustomerEmail := 'refund@example.com';
+
+  aItem := TYookassaReceiptItem.Create;
+  aItem.Description := 'Возврат товара';
+  aItem.Quantity := 1;
+  aItem.AmountValue := 150.00;
+  aItem.AmountCurrency := 'RUB';
+  aItem.VatCode := 2;
+  FReceiptRequest.Receipt.AddItem(aItem);
+
+  FReceiptRequest.ReceiptType := 'refund';
+  FReceiptRequest.PaymentId := 'payment_123456';
+  FReceiptRequest.Send := False;
+
+  aJSON := FReceiptRequest.BuildReceiptJSON;
+  aParsedJSON := TJSONObject(GetJSON(aJSON));
+  try
+    AssertEquals('refund', aParsedJSON.Strings['type']);
+    AssertEquals(False, aParsedJSON.Booleans['send']);
+    AssertEquals('payment_123456', aParsedJSON.Strings['payment_id']);
+    AssertTrue(aParsedJSON.Find('receipt') <> nil);
+  finally
+    aParsedJSON.Free;
+  end;
+end;
+
+procedure TTestYooKassa.TestReceiptRequestParseSuccessResponse;
+var
+  aReceiptId: String;
+  aJSON: TJSONObject;
+begin
+  aJSON := TJSONObject(GetJSON(
+    '{"id":"receipt_123","status":"succeeded","type":"payment","send":true}'));
+  try
+    aReceiptId := TYookassaReceiptRequest.ParseReceiptResp(aJSON);
+    AssertTrue(Pos('receipt_123', aReceiptId) > 0);
+    AssertTrue(Pos('succeeded', aReceiptId) > 0);
+  finally
+    aJSON.Free;
+  end;
+end;
+
+procedure TTestYooKassa.TestReceiptRequestParseErrorResponse;
+var
+  RaisedError: Boolean;
+  aJSON: TJSONObject;
+begin
+  RaisedError := False;
+  aJSON := TJSONObject(GetJSON('{"type":"error","code":"invalid_request","description":"Missing receipt data"}'));
+  try
+    try
+      TYookassaReceiptRequest.ParseReceiptResp(aJSON);
+    except
+      on E: Exception do RaisedError := True;
+    end;
+  finally
+    aJSON.Free;
+  end;
+  AssertTrue('There should be an exception when receipt id is missing.', RaisedError);
+end;
+
+procedure TTestYooKassa.TestReceiptRequestCreate;
+var
+  aItem: TYookassaReceiptItem;
+begin
+    FReceiptRequest.Receipt.CustomerEmail := 'create@example.com';
+    FReceiptRequest.Receipt.TaxSystemCode := 2;
+
+    aItem := TYookassaReceiptItem.Create;
+    aItem.Description := 'Создание чека';
+    aItem.Quantity := 1;
+    aItem.AmountValue := 300.00;
+    aItem.AmountCurrency := 'RUB';
+    aItem.VatCode := 1;
+    FReceiptRequest.Receipt.AddItem(aItem);
+
+    FReceiptRequest.ShopId := 'test_shop_id';
+    FReceiptRequest.SecretKey := 'test_secret_key';
+    FReceiptRequest.ReceiptType := 'payment';
+    FReceiptRequest.Send := True;
+
+    AssertEquals('test_shop_id', FReceiptRequest.ShopId);
+    AssertEquals('test_secret_key', FReceiptRequest.SecretKey);
+    AssertEquals('payment', FReceiptRequest.ReceiptType);
+    AssertEquals(True, FReceiptRequest.Send);
+    AssertTrue(Assigned(FReceiptRequest.Receipt));
+end;
+
+procedure TTestYooKassa.TestReceiptItemMarkCodeInfo;
+var
+  aItem: TYookassaReceiptItem;
+  aJSON: TJSONObject;
+  aMarkCodeInfo: TJSONObject;
+begin
+  aItem := TYookassaReceiptItem.Create;
+  try
+    aItem.Description := 'Маркированный товар';
+    aItem.Quantity := 1.0;
+    aItem.AmountValue := 500.00;
+    aItem.AmountCurrency := 'RUB';
+    aItem.VatCode := 1;
+    aItem.MarkMode := 1;
+    aItem.MarkCodeInfo := 'BASE64_ENCODED_MARK_CODE';
+
+    aJSON := aItem.ToJSON;
+    try
+      AssertEquals(1, aJSON.Integers['mark_mode']);
+      AssertTrue(aJSON.Find('mark_code_info') <> nil);
+      aMarkCodeInfo := TJSONObject(aJSON.Objects['mark_code_info']);
+      AssertEquals('BASE64_ENCODED_MARK_CODE', aMarkCodeInfo.Strings['gs_1m']);
+    finally
+      aJSON.Free;
+    end;
+  finally
+    aItem.Free;
+  end;
+end;
+
+procedure TTestYooKassa.TestReceiptEmptyCustomer;
+var
+  aReceipt: TYookassaReceipt;
+  aItem: TYookassaReceiptItem;
+  aJSON: TJSONObject;
+begin
+  aReceipt := TYookassaReceipt.Create;
+  try
+    aItem := TYookassaReceiptItem.Create;
+    aItem.Description := 'Товар без клиента';
+    aItem.Quantity := 1;
+    aItem.AmountValue := 75.00;
+    aItem.AmountCurrency := 'RUB';
+    aItem.VatCode := 1;
+    aReceipt.AddItem(aItem);
+
+    aJSON := aReceipt.ToJSON;
+    try
+      AssertTrue(aJSON.Find('customer') = nil);
+      AssertTrue(aJSON.Find('items') <> nil);
     finally
       aJSON.Free;
     end;

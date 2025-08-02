@@ -29,14 +29,51 @@ type
   TYookassaReceipt = class
   private
     FCustomerEmail: string;
+    FCustomerPhone: string;
     FItems: TList;
+    FTaxSystemCode: Integer;
   public
     constructor Create;
     destructor Destroy; override;
     procedure AddItem(aItem: TYookassaReceiptItem);
     function ToJSON: TJSONObject;
+    function ToReceiptJSON: TJSONObject; // to create a receipt separately
     property CustomerEmail: String read FCustomerEmail write FCustomerEmail;
+    property CustomerPhone: String read FCustomerPhone write FCustomerPhone;
     property Items: TList read FItems write FItems;
+    property TaxSystemCode: Integer read FTaxSystemCode write FTaxSystemCode;
+  end;
+
+  { TYookassaReceiptRequest }
+  TYookassaReceiptRequest = class
+  private
+    FShopId: string;
+    FSecretKey: string;
+    FReceiptType: string; // 'payment', 'refund'
+    FPaymentId: string; // for the refund receipt
+    FRefundId: string; // for the refund receipt
+    FReceipt: TYookassaReceipt;
+    FSend: Boolean;
+    FSettlements: TJSONArray; // to split payments
+    function DoCreateReceipt: TJSONObject;
+    function GetReceipt: TYookassaReceipt;
+  public
+    constructor Create;
+    destructor Destroy; override;
+    function BuildReceiptJSON: String;
+    function CreateReceipt: TJSONObject;
+    class function CreateReceipt(const aShopId, aSecretKey: string;
+      aReceipt: TYookassaReceipt; const aReceiptType: string = 'payment';
+      const aPaymentId: string = ''; aSend: Boolean = True): TJSONObject;
+    class function ParseReceiptResp(const aResp: TJSONObject): String;
+    property ShopId: string read FShopId write FShopId;
+    property SecretKey: string read FSecretKey write FSecretKey;
+    property ReceiptType: string read FReceiptType write FReceiptType;
+    property PaymentId: string read FPaymentId write FPaymentId;
+    property RefundId: string read FRefundId write FRefundId;
+    property Receipt: TYookassaReceipt read GetReceipt;
+    property Send: Boolean read FSend write FSend;
+    property Settlements: TJSONArray read FSettlements write FSettlements;
   end;
 
   { TYookassaPayment }
@@ -72,7 +109,7 @@ type
 implementation
 
 uses
-  opensslsockets
+  opensslsockets, yookassa_exceptions
   ;
 
 var
@@ -114,6 +151,7 @@ end;
 constructor TYookassaReceipt.Create;
 begin
   Items := TList.Create;
+  FTaxSystemCode := -1; // not specified
 end;
 
 destructor TYookassaReceipt.Destroy;
@@ -135,17 +173,175 @@ function TYookassaReceipt.ToJSON: TJSONObject;
 var
   aJson: TJSONObject;
   aItems: TJSONArray;
+  aCustomer: TJSONObject;
   i: Integer;
 begin
   aJson := TJSONObject.Create;
-  if CustomerEmail <> '' then begin
-    aJson.Add('customer', TJSONObject.Create(['email', CustomerEmail]));
+  
+  // customer
+  if (CustomerEmail <> '') or (CustomerPhone <> '') then begin
+    aCustomer := TJSONObject.Create;
+    if CustomerEmail <> '' then aCustomer.Add('email', CustomerEmail);
+    if CustomerPhone <> '' then aCustomer.Add('phone', CustomerPhone);
+    aJson.Add('customer', aCustomer);
   end;
+  
+  // items
   aItems := TJSONArray.Create;
   for i := 0 to Items.Count - 1 do
     aItems.Add(TYookassaReceiptItem(Items[i]).ToJSON);
   aJson.Add('items', aItems);
+  
+  // tax_system_code
+  if FTaxSystemCode >= 0 then
+    aJson.Add('tax_system_code', FTaxSystemCode);
+  
   Result := aJson;
+end;
+
+function TYookassaReceipt.ToReceiptJSON: TJSONObject;
+begin
+  Result := ToJSON;
+end;
+
+{ TYookassaReceiptRequest }
+
+constructor TYookassaReceiptRequest.Create;
+begin
+  FSend := True; // by default, we send the receipt to the client
+  FReceiptType := 'payment'; // by default, the payment receipt
+end;
+
+destructor TYookassaReceiptRequest.Destroy;
+begin
+  FSettlements.Free;
+  FReceipt.Free;
+  inherited Destroy;
+end;
+
+function TYookassaReceiptRequest.DoCreateReceipt: TJSONObject;
+var
+  aHttp: TFPHttpClient;
+  aAuth: string;
+  aRespStr: RawByteString;
+  ErrJSON: TJSONObject;
+begin
+  Result := nil;
+  aHttp := TFPHttpClient.Create(nil);
+  try
+    aAuth := EncodeStringBase64(FShopId + ':' + FSecretKey);
+    aHttp.AddHeader('Authorization', 'Basic ' + aAuth);
+    aHttp.AddHeader('Content-Type', 'application/json');
+    aHttp.AddHeader('Idempotence-Key', IntToHex(Random(MaxInt), 8) + IntToStr(Random(MaxInt)));
+
+    aHTTP.RequestBody := TStringStream.Create(BuildReceiptJSON);
+    try
+      aRespStr := aHTTP.Post('https://api.yookassa.ru/v3/receipts');
+    finally
+      aHTTP.RequestBody.Free;
+    end;
+
+    // Check status
+    if aHTTP.ResponseStatusCode >= 400 then
+    begin
+      try
+        ErrJSON := TJSONObject(GetJSON(aRespStr));
+      except
+        on E: Exception do
+          raise EYooKassaError.CreateFmt('Invalid error response from YooKassa: %s', [aRespStr]);
+      end;
+      raise EYooKassaError.CreateFromResponse(aHTTP.ResponseStatusCode, ErrJSON);
+    end;
+
+    Result := TJSONObject(GetJSON(aRespStr));
+  finally
+    aHttp.Free;
+  end;
+end;
+
+function TYookassaReceiptRequest.GetReceipt: TYookassaReceipt;
+begin
+  if not Assigned(FReceipt) then
+    FReceipt:=TYookassaReceipt.Create;
+  Result:=FReceipt;
+end;
+
+function TYookassaReceiptRequest.BuildReceiptJSON: String;
+var
+  aJsonReq: TJSONObject;
+begin
+  aJsonReq := TJSONObject.Create;
+  try
+    // тип чека (payment/refund)
+    aJsonReq.Add('type', FReceiptType);
+    
+    // отправлять ли чек покупателю
+    aJsonReq.Add('send', FSend);
+    
+    // данные чека
+    if Assigned(FReceipt) then
+      aJsonReq.Add('receipt', FReceipt.ToReceiptJSON);
+    
+    // для чека возврата нужен payment_id или refund_id
+    if FReceiptType = 'refund' then begin
+      if FPaymentId <> '' then
+        aJsonReq.Add('payment_id', FPaymentId)
+      else if FRefundId <> '' then
+        aJsonReq.Add('refund_id', FRefundId);
+    end;
+    
+    // settlements для разделения платежей (если используется)
+    if Assigned(FSettlements) and (FSettlements.Count > 0) then
+      aJsonReq.Add('settlements', FSettlements);
+    
+    Result := aJsonReq.AsJSON;
+  finally
+    aJsonReq.Free;
+  end;
+end;
+
+function TYookassaReceiptRequest.CreateReceipt: TJSONObject;
+begin
+  Result := DoCreateReceipt;
+end;
+
+class function TYookassaReceiptRequest.CreateReceipt(const aShopId, aSecretKey: string;
+  aReceipt: TYookassaReceipt; const aReceiptType: string = 'payment';
+  const aPaymentId: string = ''; aSend: Boolean = True): TJSONObject;
+var
+  aReceiptReq: TYookassaReceiptRequest;
+begin
+  aReceiptReq := TYookassaReceiptRequest.Create;
+  try
+    aReceiptReq.FShopId := aShopId;
+    aReceiptReq.FSecretKey := aSecretKey;
+    aReceiptReq.FReceipt := aReceipt;
+    aReceiptReq.FReceiptType := aReceiptType;
+    aReceiptReq.FPaymentId := aPaymentId;
+    aReceiptReq.FSend := aSend;
+    Result := aReceiptReq.DoCreateReceipt;
+  finally
+    aReceiptReq.Free;
+  end;
+end;
+
+class function TYookassaReceiptRequest.ParseReceiptResp(const aResp: TJSONObject): String;
+var
+  aReceiptId: TJSONStringType;
+  aStatus: TJSONStringType;
+begin
+  // получаем ID чека
+  aReceiptId := aResp.Get('id', '');
+  aStatus := aResp.Get('status', '');
+  
+  if aReceiptId = '' then
+    raise Exception.Create('No receipt id in YooKassa response: ' + aResp.AsJSON);
+    
+  Result := aReceiptId;
+  
+  // можно также вернуть дополнительную информацию о статусе
+  if aStatus <> '' then
+    Result := Result + ' (status: ' + aStatus + ')';
 end;
 
 { TYookassaPayment }
@@ -161,6 +357,7 @@ var
   aHttp: TFPHttpClient;
   aAuth: string;
   aRespStr: RawByteString;
+  ErrJSON: TJSONObject;
 begin
   Result := nil;
   aHttp := TFPHttpClient.Create(nil);
@@ -169,13 +366,27 @@ begin
     aHttp.AddHeader('Authorization', 'Basic ' + aAuth);
     aHttp.AddHeader('Content-Type', 'application/json');
     aHttp.AddHeader('Idempotence-Key', IntToHex(Random(MaxInt), 8) + IntToStr(Random(MaxInt)));
+
     aHTTP.RequestBody := TStringStream.Create(BuildPaymentJSON);
     try
       aRespStr := aHTTP.Post('https://api.yookassa.ru/v3/payments');
     finally
       aHTTP.RequestBody.Free;
     end;
-    Result:=TJSONObject(GetJSON(aRespStr));
+
+    // Проверяем статус
+    if aHTTP.ResponseStatusCode >= 400 then
+    begin
+      try
+        ErrJSON := TJSONObject(GetJSON(aRespStr));
+      except
+        on E: Exception do
+          raise EYooKassaError.CreateFmt('Invalid error response from YooKassa: %s', [aRespStr]);
+      end;
+      raise EYooKassaError.CreateFromResponse(aHTTP.ResponseStatusCode, ErrJSON);
+    end;
+
+    Result := TJSONObject(GetJSON(aRespStr));
   finally
     aHttp.Free;
   end;

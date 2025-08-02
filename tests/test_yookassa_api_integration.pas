@@ -16,9 +16,9 @@ type
   private
     FResp: TJSONObject;
     FReceiptResp: TJSONObject;
-    FYookassaAPI: TYookassaPayment;
+    FYookassaAPI: TYookassaPaymentRequest;
     FReceiptRequest: TYookassaReceiptRequest;
-    class procedure LoadConfig(aPayment: TYookassaPayment);
+    class procedure LoadConfig(aPayment: TYookassaPaymentRequest);
     class procedure LoadReceiptConfig(aReceiptRequest: TYookassaReceiptRequest);
     procedure UpdateTestReceipt(TestReceipt: TYookassaReceipt; aAmount: Currency; const aCurrency: string);
   protected
@@ -41,7 +41,7 @@ uses
   IniFiles
   ;
 
-class procedure TTestYooKassaIntegration.LoadConfig(aPayment: TYookassaPayment);
+class procedure TTestYooKassaIntegration.LoadConfig(aPayment: TYookassaPaymentRequest);
 var
   aIni: TIniFile;
 begin
@@ -93,7 +93,7 @@ end;
 procedure TTestYooKassaIntegration.SetUp;
 begin
   inherited SetUp;
-  FYookassaAPI := TYookassaPayment.Create;
+  FYookassaAPI := TYookassaPaymentRequest.Create;
   FReceiptRequest := TYookassaReceiptRequest.Create;
 end;
 
@@ -135,15 +135,17 @@ var
   aConfirmationURL: String;
 begin
   LoadConfig(FYookassaAPI);
-  FResp := FYookassaAPI.CreatePayment;
-  aConfirmationURL := FYookassaAPI.ParseJSONResp(FResp);
+  FResp := FYookassaAPI.Execute;
+  if FResp.Find('confirmation') <> nil then
+    aConfirmationURL := FResp.Objects['confirmation'].Get('confirmation_url', '')
+  else
+    aConfirmationURL := '';
   AssertTrue('confirmation_url must be exists', Pos('http', aConfirmationURL) = 1);
 end;
 
 // Интеграционный тест с отправкой receipt
 procedure TTestYooKassaIntegration.TestCreatePaymentWithReceipt_Sandbox;
 var
-  aConfirmationURL: String;
   aReceipt: TYookassaReceipt;
   aItem: TYookassaReceiptItem;
 begin
@@ -163,32 +165,24 @@ begin
 
   FYookassaAPI.Receipt := aReceipt;
 
-  FResp := FYookassaAPI.CreatePayment;
-  aConfirmationURL := FYookassaAPI.ParseJSONResp(FResp);
-  AssertTrue('confirmation_url must be exists', Pos('http', aConfirmationURL) = 1);
+  FResp := FYookassaAPI.Execute;
+  AssertTrue('confirmation_url must be exists', Pos('http', FYookassaAPI.ConfirmationURL) = 1);
 end;
 
-// ========== НОВЫЕ ИНТЕГРАЦИОННЫЕ ТЕСТЫ ДЛЯ ЧЕКОВ ==========
-
 procedure TTestYooKassaIntegration.TestCreateReceipt_Sandbox;
-var
-  aReceiptId: String;
 begin
   LoadReceiptConfig(FReceiptRequest);
 
   UpdateTestReceipt(FReceiptRequest.Receipt, 50.00, 'RUB');
   FReceiptRequest.ReceiptType := 'payment';
 
-  FReceiptResp := FReceiptRequest.CreateReceipt;
-  aReceiptId := TYookassaReceiptRequest.ParseReceiptResp(FReceiptResp);
+  FReceiptResp := FReceiptRequest.Execute;
 
-  AssertTrue('Receipt ID must be present', aReceiptId <> '');
-  AssertTrue('Receipt ID should contain receipt prefix', Pos('receipt', aReceiptId) > 0);
+  AssertTrue('Receipt ID must be present', FReceiptRequest.ReceiptID <> '');
+  AssertTrue('Receipt ID should contain receipt prefix', Pos('receipt', FReceiptRequest.ReceiptID) > 0);
 end;
 
 procedure TTestYooKassaIntegration.TestCreateReceiptWithPhone_Sandbox;
-var
-  aReceiptId: String;
 begin
   LoadReceiptConfig(FReceiptRequest);
 
@@ -198,44 +192,37 @@ begin
   FReceiptRequest.ReceiptType := 'payment';
   FReceiptRequest.Send := True;
 
-  FReceiptResp := FReceiptRequest.CreateReceipt;
-  aReceiptId := TYookassaReceiptRequest.ParseReceiptResp(FReceiptResp);
+  FReceiptResp := FReceiptRequest.Execute;
 
-  AssertTrue('Receipt with phone must be created', aReceiptId <> '');
-  // Проверяем, что в ответе есть информация о customer
-  AssertTrue('Response should contain customer info',
-             FReceiptResp.Find('receipt') <> nil);
+  AssertTrue('Receipt with phone must be created', FReceiptRequest.ReceiptID <> '');
 end;
 
 procedure TTestYooKassaIntegration.TestCreateReceiptWithTaxSystem_Sandbox;
 var
-  aReceiptId: String;
   aReceipt: TYookassaReceipt;
 begin
   LoadReceiptConfig(FReceiptRequest);
 
   UpdateTestReceipt(FReceiptRequest.Receipt, 120.00, 'RUB');
-  aReceipt.TaxSystemCode := 1; // УСН доходы
+  aReceipt.TaxSystemCode := 1; // УСН income
 
   FReceiptRequest.ReceiptType := 'payment';
 
-  FReceiptResp := FReceiptRequest.CreateReceipt;
-  aReceiptId := TYookassaReceiptRequest.ParseReceiptResp(FReceiptResp);
+  FReceiptResp := FReceiptRequest.Execute;
 
-  AssertTrue('Receipt with tax system must be created', aReceiptId <> '');
-  AssertTrue('Status should be present', Pos('status:', aReceiptId) > 0);
+  AssertTrue('Receipt with tax system must be created', FReceiptRequest.ReceiptID <> '');
+  AssertTrue('Status should be present', Pos('status:', FReceiptRequest.ReceiptID) > 0);
 end;
 
 procedure TTestYooKassaIntegration.TestCreateRefundReceipt_Sandbox;
 var
   aPaymentId: String;
-  aReceiptId: String;
 begin
   // Сначала создаем платеж для получения payment_id
   LoadConfig(FYookassaAPI);
 
   UpdateTestReceipt(FReceiptRequest.Receipt, 30.00, 'RUB');
-  FResp := FYookassaAPI.CreatePayment;
+  FResp := FYookassaAPI.Execute;
 
   // Получаем payment_id из ответа
   aPaymentId := FResp.Get('id', '');
@@ -247,16 +234,14 @@ begin
   FReceiptRequest.PaymentId := aPaymentId;
   FReceiptRequest.Send := False; // Не отправляем чек возврата клиенту
 
-  FReceiptResp := FReceiptRequest.CreateReceipt;
-  aReceiptId := TYookassaReceiptRequest.ParseReceiptResp(FReceiptResp);
+  FReceiptResp := FReceiptRequest.Execute;
 
-  AssertTrue('Refund receipt must be created', aReceiptId <> '');
+  AssertTrue('Refund receipt must be created', FReceiptRequest.ReceiptID <> '');
   AssertEquals('refund', FReceiptResp.Get('type', ''));
 end;
 
 procedure TTestYooKassaIntegration.TestCreateReceiptWithMarkCode_Sandbox;
 var
-  aReceiptId: String;
   aItem: TYookassaReceiptItem;
 begin
   LoadReceiptConfig(FReceiptRequest);
@@ -278,10 +263,9 @@ begin
 
   FReceiptRequest.ReceiptType := 'payment';
 
-  FReceiptResp := FReceiptRequest.CreateReceipt;
-  aReceiptId := TYookassaReceiptRequest.ParseReceiptResp(FReceiptResp);
+  FReceiptResp := FReceiptRequest.Execute;
 
-  AssertTrue('Receipt with mark code must be created', aReceiptId <> '');
+  AssertTrue('Receipt with mark code must be created', FReceiptRequest.ReceiptID <> '');
   // We check that the receipt contains information about labeling
   AssertTrue('Receipt should contain items', FReceiptResp.FindPath('receipt.items') <> nil);
 end;

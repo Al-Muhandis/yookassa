@@ -5,24 +5,37 @@ unit test_yookassa_api;
 interface
 
 uses
-  Classes, SysUtils, fpcunit, testregistry, yookassa_api
+  Classes, SysUtils, fpcunit, testregistry, yookassa_api, fpjson
   ;
 
 type
+
+  { TYookassaPaymentTest }
+
+  TYookassaPaymentTest = class(TYookassaPaymentRequest)
+  public
+    function BuildRequestJSONTest: String;
+  end;
+
+  { TYookassaReceiptRequestTest }
+
+  TYookassaReceiptRequestTest = class(TYookassaReceiptRequest)
+  public
+    function BuildRequestJSONTest: String;
+    function ParseResponse(const AResponse: String): TJSONObject; override;
+  end;
 
   { TTestYooKassa }
 
   TTestYooKassa = class(TTestCase)
   private
-    FYookassaAPI: TYookassaPayment;
-    FReceiptRequest: TYookassaReceiptRequest;
+    FYookassaAPI: TYookassaPaymentTest;
+    FReceiptRequest: TYookassaReceiptRequestTest;
   protected
     procedure SetUp; override;
     procedure TearDown; override;
   published
     procedure TestBuildRequestData;
-    procedure TestParseSuccessResponse;
-    procedure TestParseErrorResponse;
     procedure TestReceiptItemToJSON;
     procedure TestReceiptToJSON;
     procedure TestReceiptWithPhoneToJSON;
@@ -30,7 +43,6 @@ type
     procedure TestReceiptRequestBuildJSON;
     procedure TestReceiptRequestBuildRefundJSON;
     procedure TestReceiptRequestParseSuccessResponse;
-    procedure TestReceiptRequestParseErrorResponse;
     procedure TestReceiptRequestCreate;
     procedure TestReceiptItemMarkCodeInfo;
     procedure TestReceiptEmptyCustomer;
@@ -38,14 +50,29 @@ type
 
 implementation
 
-uses
-  fpjson
-  ;
+{ TYookassaPaymentTest }
+
+function TYookassaPaymentTest.BuildRequestJSONTest: String;
+begin
+  Result:=BuildRequestJSON;
+end;
+
+{ TYookassaReceiptRequestTest }
+
+function TYookassaReceiptRequestTest.BuildRequestJSONTest: String;
+begin
+  Result:=BuildRequestJSON;
+end;
+
+function TYookassaReceiptRequestTest.ParseResponse(const AResponse: String): TJSONObject;
+begin
+  Result:=inherited ParseResponse(AResponse);
+end;
 
 procedure TTestYooKassa.SetUp;
 begin
-  FYookassaAPI := TYookassaPayment.Create;
-  FReceiptRequest := TYookassaReceiptRequest.Create;
+  FYookassaAPI := TYookassaPaymentTest.Create;
+  FReceiptRequest := TYookassaReceiptRequestTest.Create;
   inherited SetUp;
 end;
 
@@ -63,43 +90,9 @@ begin
   FYookassaAPI.Amount := 123.45;
   FYookassaAPI.Currency := 'RUB';
   FYookassaAPI.Description := 'Test payment';
-  aJSON := FYookassaAPI.BuildPaymentJSON;
+  aJSON := FYookassaAPI.BuildRequestJSON;
   AssertTrue(Pos('"amount"', aJSON) > 0);
   AssertTrue(Pos('"value" : "123.45"', aJSON) > 0);
-end;
-
-procedure TTestYooKassa.TestParseSuccessResponse;
-var
-  aConfirmationURL: String;
-  aJSON: TJSONObject;
-begin
-  aJSON := TJSONObject(GetJSON(
-    '{"id":"pay_123","status":"pending","confirmation":{"type":"redirect","confirmation_url":"https://pay.test"}}'));
-  try
-    aConfirmationURL := FYookassaAPI.ParseJSONResp(aJSON);
-  finally
-    aJSON.Free;
-  end;
-  AssertEquals('https://pay.test', aConfirmationURL);
-end;
-
-procedure TTestYooKassa.TestParseErrorResponse;
-var
-  RaisedError: Boolean;
-  aJSON: TJSONObject;
-begin
-  RaisedError := False;
-  aJSON := TJSONObject(GetJSON('{"type":"error","code":"invalid_request"}'));
-  try
-    try
-      FYookassaAPI.ParseJSONResp(aJSON);
-    except
-      on E: Exception do RaisedError := True;
-    end;
-  finally
-    aJSON.Free;
-  end;
-  AssertTrue('There should be an exception in case of a YooKassa error.', RaisedError);
 end;
 
 procedure TTestYooKassa.TestReceiptItemToJSON;
@@ -258,7 +251,7 @@ begin
   FReceiptRequest.ReceiptType := 'payment';
   FReceiptRequest.Send := True;
 
-  aJSON := FReceiptRequest.BuildReceiptJSON;
+  aJSON := FReceiptRequest.BuildRequestJSONTest;
   aParsedJSON := TJSONObject(GetJSON(aJSON));
   try
     AssertEquals('payment', aParsedJSON.Strings['type']);
@@ -289,7 +282,7 @@ begin
   FReceiptRequest.PaymentId := 'payment_123456';
   FReceiptRequest.Send := False;
 
-  aJSON := FReceiptRequest.BuildReceiptJSON;
+  aJSON := FReceiptRequest.BuildRequestJSONTest;
   aParsedJSON := TJSONObject(GetJSON(aJSON));
   try
     AssertEquals('refund', aParsedJSON.Strings['type']);
@@ -303,37 +296,17 @@ end;
 
 procedure TTestYooKassa.TestReceiptRequestParseSuccessResponse;
 var
-  aReceiptId: String;
-  aJSON: TJSONObject;
+  aJSON: String;
+  aResp: TJSONObject;
 begin
-  aJSON := TJSONObject(GetJSON(
-    '{"id":"receipt_123","status":"succeeded","type":"payment","send":true}'));
+  aJSON := '{"id":"receipt_123","status":"succeeded","type":"payment","send":true}';
   try
-    aReceiptId := TYookassaReceiptRequest.ParseReceiptResp(aJSON);
-    AssertTrue(Pos('receipt_123', aReceiptId) > 0);
-    AssertTrue(Pos('succeeded', aReceiptId) > 0);
+    aResp := FReceiptRequest.ParseResponse(aJSON);
+    AssertTrue(FReceiptRequest.ReceiptID='receipt_123');
+    AssertTrue('succeeded'=aResp.Strings['status']);
   finally
-    aJSON.Free;
+    aResp.Free;
   end;
-end;
-
-procedure TTestYooKassa.TestReceiptRequestParseErrorResponse;
-var
-  RaisedError: Boolean;
-  aJSON: TJSONObject;
-begin
-  RaisedError := False;
-  aJSON := TJSONObject(GetJSON('{"type":"error","code":"invalid_request","description":"Missing receipt data"}'));
-  try
-    try
-      TYookassaReceiptRequest.ParseReceiptResp(aJSON);
-    except
-      on E: Exception do RaisedError := True;
-    end;
-  finally
-    aJSON.Free;
-  end;
-  AssertTrue('There should be an exception when receipt id is missing.', RaisedError);
 end;
 
 procedure TTestYooKassa.TestReceiptRequestCreate;

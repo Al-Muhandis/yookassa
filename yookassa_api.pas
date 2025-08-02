@@ -180,6 +180,10 @@ begin
   Result := EmptyStr;
   aHttp := TFPHttpClient.Create(nil);
   try
+    // --- PRE-REQUEST VALIDATION ---
+    EYooKassaValidationError.RaiseIfEmpty(FShopId, 'ShopId');
+    EYooKassaValidationError.RaiseIfEmpty(FSecretKey, 'SecretKey');
+
     aHttp.AddHeader('Authorization', GetAuthHeader);
     aHttp.AddHeader('Content-Type', 'application/json');
     aHttp.AddHeader('Idempotence-Key', GenerateIdempotenceKey);
@@ -191,15 +195,13 @@ begin
         aRespStr := aHttp.Post(GetEndpoint)
       else
       begin
-        // It can be extended to PUT, GET, etc.
         raise Exception.Create('HTTP method not supported: ' + GetMethod);
       end;
     finally
-      aHttp.RequestBody.Free; // free stream
+      aHttp.RequestBody.Free;
     end;
 
-    Result:=aRespStr;
-    // check status
+    // Checking the status (API error)
     if aHttp.ResponseStatusCode >= 400 then
     begin
       try
@@ -210,6 +212,8 @@ begin
       end;
       raise EYooKassaError.CreateFromResponse(aHttp.ResponseStatusCode, ErrJSON);
     end;
+
+    Result := aRespStr;
   finally
     aHttp.Free;
   end;
@@ -318,6 +322,17 @@ function TYookassaReceiptRequest.BuildRequestJSON: string;
 var
   aJsonReq: TJSONObject;
 begin
+  EYooKassaValidationError.RaiseIfNil(FReceipt, 'Receipt');
+  EYooKassaValidationError.RaiseIfFalse(FReceipt.Items.Count > 0, 'Receipt must have at least one item');
+
+  if FReceiptType = 'refund' then
+  begin
+    EYooKassaValidationError.RaiseIfFalse(
+      (FPaymentId <> '') or (FRefundId <> ''),
+      'For refund receipt, either PaymentId or RefundId must be specified'
+    );
+  end;
+
   aJsonReq := TJSONObject.Create;
   try
     // receipt type (payment/refund)
@@ -427,6 +442,11 @@ function TYookassaPaymentRequest.BuildRequestJSON: string;
 var
   aJsonReq: TJSONObject;
 begin
+  EYooKassaValidationError.RaiseIfZeroOrNegative(FAmount, 'Amount');
+  EYooKassaValidationError.RaiseIfEmpty(FCurrency, 'Currency');
+  EYooKassaValidationError.RaiseIfEmpty(FDescription, 'Description');
+  EYooKassaValidationError.RaiseIfEmpty(FReturnUrl, 'ReturnUrl');
+
   aJsonReq := TJSONObject.Create;
   try
     aJsonReq.Add('amount', BuildAmountJSON);

@@ -90,6 +90,7 @@ begin
   FYookassaAPI.Amount := 123.45;
   FYookassaAPI.Currency := 'RUB';
   FYookassaAPI.Description := 'Test payment';
+  FYookassaAPI.ReturnUrl:='https://sample.com/';
   aJSON := FYookassaAPI.BuildRequestJSON;
   AssertTrue(Pos('"amount"', aJSON) > 0);
   AssertTrue(Pos('"value" : "123.45"', aJSON) > 0);

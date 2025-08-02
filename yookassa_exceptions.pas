@@ -9,6 +9,7 @@ uses
   ;
 
 type
+  { Exception for the YooKassa API errors (responses with code >= 400) }
   EYooKassaError = class(Exception)
   private
     FStatusCode: Integer;
@@ -24,6 +25,16 @@ type
     property Description: string read GetDescription;
   end;
 
+  { Exception for data validation errors before sending the request }
+  EYooKassaValidationError = class(Exception)
+  public
+    constructor Create(const Msg: string);
+    class procedure RaiseIfEmpty(const Value, FieldName: string);
+    class procedure RaiseIfZeroOrNegative(const Value: Double; const FieldName: string);
+    class procedure RaiseIfNil(const Value: TObject; const FieldName: string);
+    class procedure RaiseIfFalse(const Condition: Boolean; const Msg: string);
+  end;
+
 implementation
 
 { EYooKassaError }
@@ -32,7 +43,7 @@ constructor EYooKassaError.CreateFromResponse(const AStatusCode: Integer; AError
 begin
   inherited Create('');
   FStatusCode := AStatusCode;
-  FErrorJSON := AErrorJSON; // владеет вызывающий код? Нет — делаем копию
+  FErrorJSON := AErrorJSON;
   if Assigned(AErrorJSON) then
     Message := Format('YooKassa API error [%d]: %s', [AStatusCode, GetDescription])
   else
@@ -61,5 +72,35 @@ begin
     Result := 'unknown';
 end;
 
-end.
+{ EYooKassaValidationError }
 
+constructor EYooKassaValidationError.Create(const Msg: string);
+begin
+  inherited Create('Validation failed: ' + Msg);
+end;
+
+class procedure EYooKassaValidationError.RaiseIfEmpty(const Value, FieldName: string);
+begin
+  if Value = '' then
+    raise Self.Create(FieldName + ' is required');
+end;
+
+class procedure EYooKassaValidationError.RaiseIfZeroOrNegative(const Value: Double; const FieldName: string);
+begin
+  if Value <= 0 then
+    raise Self.Create(FieldName + ' must be greater than zero');
+end;
+
+class procedure EYooKassaValidationError.RaiseIfNil(const Value: TObject; const FieldName: string);
+begin
+  if not Assigned(Value) then
+    raise Self.Create(FieldName + ' is required');
+end;
+
+class procedure EYooKassaValidationError.RaiseIfFalse(const Condition: Boolean; const Msg: string);
+begin
+  if not Condition then
+    raise Self.Create(Msg);
+end;
+
+end.

@@ -56,13 +56,13 @@ type
     function GenerateIdempotenceKey: string;
     function GetAuthHeader: string;
     function GetDefaultApiBaseUrl: string;
-    procedure Log(aEvent: TEventType; const Msg: string);
   protected
     function BuildRequestJSON: string; virtual; abstract;
     function CreateResponse(aRaw: TJSONObject): TYookassaResponse; virtual; abstract;
     function GetEndpoint: string; virtual; abstract;
     function GetMethod: string; virtual;
-    function DoExecute: String;
+    function DoExecute: String; 
+    procedure Log(aEvent: TEventType; const Msg: string);
   public
     property OnLog: TYookassaLogEvent read FOnLog write FOnLog;
     property ShopId: string read FShopId write FShopId;
@@ -231,8 +231,8 @@ var
 begin
   Result := 0;
   ValueStr := Raw.FindPath('amount.value').AsString;
-  if ValueStr <> '' then
-    Result := StrToCurr(ValueStr);
+  if not ValueStr.IsEmpty then
+    Result := StrToCurr(ValueStr, _FrmtStngsJSON);
 end;
 
 { TYookassaReceiptResponse }

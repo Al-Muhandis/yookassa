@@ -5,7 +5,7 @@ unit yookassa_api;
 interface
 
 uses
-  Classes, SysUtils, fpjson, jsonparser, fphttpclient, base64, fgl
+  Classes, windows, SysUtils, fpjson, jsonparser, fphttpclient, base64, fgl
   ;
 
 type
@@ -175,8 +175,14 @@ begin
 end;
 
 function TYookassaRequest.GenerateIdempotenceKey: string;
+var
+  aGUID: TGUID;
 begin
-  Result := IntToHex(Random(MaxInt), 8) + IntToStr(Random(MaxInt));
+  //Result := IntToHex(Random(MaxInt), 8) + IntToStr(Random(MaxInt));
+  CreateGUID(aGUID);
+  Result:=GUIDToString(aGUID);
+  Result := StringReplace(Result, '{', EmptyStr, [rfReplaceAll]);
+  Result := StringReplace(Result, '}', EmptyStr, [rfReplaceAll]);
 end;
 
 procedure TYookassaRequest.Log(aEvent: TEventType; const Msg: string);

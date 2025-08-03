@@ -44,7 +44,6 @@ type
     procedure TestReceiptRequestBuildRefundJSON;
     procedure TestReceiptRequestParseSuccessResponse;
     procedure TestReceiptRequestCreate;
-    procedure TestReceiptItemMarkCodeInfo;
     procedure TestReceiptEmptyCustomer;
   end;
 
@@ -110,8 +109,6 @@ begin
     aItem.VatCode := 1;
     aItem.PaymentMode := 'full_prepayment';
     aItem.PaymentSubject := 'commodity';
-    aItem.MarkMode := 0;
-    aItem.MarkCodeInfo := 'Base64Code';
     aItem.Measure := 'piece';
 
     aJSON := aItem.ToJSON;
@@ -122,8 +119,6 @@ begin
       AssertEquals('RUB', TJSONObject(aJSON.Objects['amount']).Strings['currency']);
       AssertEquals('full_prepayment', aJSON.Strings['payment_mode']);
       AssertEquals('commodity', aJSON.Strings['payment_subject']);
-      AssertEquals(0, aJSON.Integers['mark_mode']);
-      AssertTrue(aJSON.Find('mark_code_info') <> nil);
       AssertEquals('piece', aJSON.Strings['measure']);
     finally
       aJSON.Free;
@@ -335,36 +330,6 @@ begin
     AssertEquals('payment', FReceiptRequest.ReceiptType);
     AssertEquals(True, FReceiptRequest.Send);
     AssertTrue(Assigned(FReceiptRequest.Receipt));
-end;
-
-procedure TTestYooKassa.TestReceiptItemMarkCodeInfo;
-var
-  aItem: TYookassaReceiptItem;
-  aJSON: TJSONObject;
-  aMarkCodeInfo: TJSONObject;
-begin
-  aItem := TYookassaReceiptItem.Create;
-  try
-    aItem.Description := 'Маркированный товар';
-    aItem.Quantity := 1.0;
-    aItem.AmountValue := 500.00;
-    aItem.AmountCurrency := 'RUB';
-    aItem.VatCode := 1;
-    aItem.MarkMode := 1;
-    aItem.MarkCodeInfo := 'BASE64_ENCODED_MARK_CODE';
-
-    aJSON := aItem.ToJSON;
-    try
-      AssertEquals(1, aJSON.Integers['mark_mode']);
-      AssertTrue(aJSON.Find('mark_code_info') <> nil);
-      aMarkCodeInfo := TJSONObject(aJSON.Objects['mark_code_info']);
-      AssertEquals('BASE64_ENCODED_MARK_CODE', aMarkCodeInfo.Strings['gs_1m']);
-    finally
-      aJSON.Free;
-    end;
-  finally
-    aItem.Free;
-  end;
 end;
 
 procedure TTestYooKassa.TestReceiptEmptyCustomer;

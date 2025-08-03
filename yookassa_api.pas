@@ -104,7 +104,7 @@ type
     property Settlements: TJSONArray read FSettlements write FSettlements;
     class function CreateReceipt(const aShopId, aSecretKey: string;
       aReceipt: TYookassaReceipt; const aReceiptType: string = 'payment';
-      const aPaymentId: string = ''; aSend: Boolean = True): TJSONObject;
+      const aPaymentId: string = ''; aSend: Boolean = True): String;
     property ReceiptID: String read FReceiptID;
     property Status: String read FStatus;
   end;
@@ -150,6 +150,20 @@ var
 
 const
   _YK_DEFAULT_API_URL = 'https://api.yookassa.ru/v3';
+
+function IsValidBase64(const AStr: string): Boolean;
+var
+  aData: String;
+begin
+  Result := False;
+  try
+    aData := DecodeStringBase64(AStr);
+    Result := Length(aData) > 0;
+  except
+    on E: Exception do
+      Exit(False);
+  end;
+end;
 
 { TYookassaRequest }
 
@@ -284,6 +298,7 @@ function TYookassaReceiptItem.ToJSON: TJSONObject;
 var
   aAmount: TJSONObject;
   aMarkCodeInfo: TJSONObject;
+  aMarkCodeBytes: String;
 begin
   Result := TJSONObject.Create;
   Result.Add('description', Description);
@@ -308,8 +323,8 @@ begin
 
     // Optional: length check after decoding
     try
-      MarkCodeBytes := DecodeStringBase64(MarkCodeInfo);
-      if (Length(MarkCodeBytes) < 30) or (Length(MarkCodeBytes) > 100) then
+      aMarkCodeBytes := DecodeStringBase64(MarkCodeInfo);
+      if (Length(aMarkCodeBytes) < 30) or (Length(aMarkCodeBytes) > 100) then
         raise EYooKassaValidationError.Create('MarkCodeInfo has invalid length after decoding (expected 30–100 bytes)');
     except
       on E: Exception do
@@ -452,11 +467,11 @@ begin
   Result:=FReceipt;
 end;
 
-class function TYookassaReceiptRequest.CreateReceipt(const aShopId, aSecretKey: string;
-  aReceipt: TYookassaReceipt; const aReceiptType: string = 'payment';
-  const aPaymentId: string = ''; aSend: Boolean = True): TJSONObject;
+class function TYookassaReceiptRequest.CreateReceipt(const aShopId, aSecretKey: string; aReceipt: TYookassaReceipt;
+  const aReceiptType: string; const aPaymentId: string; aSend: Boolean): String;
 var
   aReceiptReq: TYookassaReceiptRequest;
+  aResp: TJSONObject;
 begin
   aReceiptReq := TYookassaReceiptRequest.Create;
   try
@@ -466,7 +481,12 @@ begin
     aReceiptReq.FReceiptType := aReceiptType;
     aReceiptReq.FPaymentId := aPaymentId;
     aReceiptReq.FSend := aSend;
-    Result := aReceiptReq.Execute;
+    aResp := aReceiptReq.Execute;
+    try
+      Result := aResp.Get('confirmation_url', '');
+    finally
+      aResp.Free;
+    end;
   finally
     aReceiptReq.Free;
   end;

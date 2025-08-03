@@ -28,15 +28,21 @@ type
 
   TTestYooKassa = class(TTestCase)
   private
-    FYookassaAPI: TYookassaPaymentTest;
+    FPaymentRequest: TYookassaPaymentTest;
     FReceiptRequest: TYookassaReceiptRequestTest;
     FTestItem: TYookassaReceiptItem;
     procedure CallToJSON;
+    procedure LogHandler(aEvent: TEventType; const aMsg: string);
+    procedure CreatePaymentStaticHandler;
   protected
     procedure SetUp; override;
     procedure TearDown; override;
   published
     procedure TestBuildRequestData;
+    procedure TestCreatePaymentStatic;
+    procedure TestPaymentResponseParsing;
+    procedure TestReceiptEmptyCustomer;
+    procedure TestReceiptItemsAutoFree;
     procedure TestReceiptItemToJSON;
     procedure TestReceiptToJSON;
     procedure TestReceiptWithPhoneToJSON;
@@ -44,7 +50,8 @@ type
     procedure TestReceiptRequestBuildJSON;
     procedure TestReceiptRequestBuildRefundJSON;
     procedure TestReceiptRequestCreate;
-    procedure TestReceiptEmptyCustomer;
+    procedure TestReceiptResponseParsing;
+    procedure TestLogging;
     procedure TestMarkCodeInfoValidation;
   end;
 
@@ -76,16 +83,27 @@ begin
   aJSON.Free;
 end;
 
+procedure TTestYooKassa.LogHandler(aEvent: TEventType; const aMsg: string);
+begin
+  AssertEquals('Test message', aMsg);
+  AssertEquals(Ord(etDebug), Ord(aEvent));
+end;
+
+procedure TTestYooKassa.CreatePaymentStaticHandler;
+begin
+  TYookassaPaymentRequest.CreatePayment('', '', 100, 'RUB', 'Test', 'https://return');
+end;
+
 procedure TTestYooKassa.SetUp;
 begin
-  FYookassaAPI := TYookassaPaymentTest.Create;
+  FPaymentRequest := TYookassaPaymentTest.Create;
   FReceiptRequest := TYookassaReceiptRequestTest.Create;
   inherited SetUp;
 end;
 
 procedure TTestYooKassa.TearDown;
 begin
-  FYookassaAPI.Free;
+  FPaymentRequest.Free;
   FReceiptRequest.Free;
   inherited TearDown;
 end;
@@ -94,13 +112,55 @@ procedure TTestYooKassa.TestBuildRequestData;
 var
   aJSON: String;
 begin
-  FYookassaAPI.Amount := 123.45;
-  FYookassaAPI.Currency := 'RUB';
-  FYookassaAPI.Description := 'Test payment';
-  FYookassaAPI.ReturnUrl:='https://sample.com/';
-  aJSON := FYookassaAPI.BuildRequestJSON;
+  FPaymentRequest.Amount := 123.45;
+  FPaymentRequest.Currency := 'RUB';
+  FPaymentRequest.Description := 'Test payment';
+  FPaymentRequest.ReturnUrl:='https://sample.com/';
+  aJSON := FPaymentRequest.BuildRequestJSON;
   AssertTrue(Pos('"amount"', aJSON) > 0);
   AssertTrue(Pos('"value" : "123.45"', aJSON) > 0);
+end;
+
+procedure TTestYooKassa.TestCreatePaymentStatic;
+begin
+  AssertException(EYooKassaValidationError, @CreatePaymentStaticHandler);
+end;
+
+procedure TTestYooKassa.TestLogging;
+begin
+  FPaymentRequest.OnLog := @LogHandler;
+  FPaymentRequest.Log(etDebug, 'Test message');
+end;
+
+procedure TTestYooKassa.TestPaymentResponseParsing;
+var
+  aRaw, aConfirmation, aAmount: TJSONObject;
+  aResp: TYookassaPaymentResponse;
+begin
+  aRaw := TJSONObject.Create;
+  try
+    aRaw.Add('id', 'pay_123');
+    aRaw.Add('status', 'pending');
+    aConfirmation := TJSONObject.Create;
+    aConfirmation.Add('confirmation_url', 'https://yookassa.ru/checkout/pay/abc');
+    aRaw.Add('confirmation', aConfirmation);
+    aAmount := TJSONObject.Create;
+    aAmount.Add('value', '100.00');
+    aAmount.Add('currency', 'RUB');
+    aRaw.Add('amount', aAmount);
+
+    aResp := TYookassaPaymentResponse.Create(aRaw);
+    try
+      AssertEquals('pay_123', aResp.GetId);
+      AssertEquals('pending', aResp.GetStatus);
+      AssertEquals('https://yookassa.ru/checkout/pay/abc', aResp.ConfirmationURL);
+      AssertEquals(100.00, aResp.Amount);
+    finally
+      aResp.Free;
+    end;
+  finally
+    // aRaw now owns TYookassaPaymentResponse
+  end;
 end;
 
 procedure TTestYooKassa.TestReceiptItemToJSON;
@@ -325,6 +385,30 @@ begin
     AssertTrue(Assigned(FReceiptRequest.Receipt));
 end;
 
+procedure TTestYooKassa.TestReceiptResponseParsing;
+var
+  aRaw: TJSONObject;
+  aResp: TYookassaReceiptResponse;
+begin
+  aRaw := TJSONObject.Create;
+  try
+    aRaw.Add('id', 'rcpt_456');
+    aRaw.Add('status', 'succeeded');
+    aRaw.Add('payment_id', 'pay_789');
+
+    aResp := TYookassaReceiptResponse.Create(aRaw);
+    try
+      AssertEquals('rcpt_456', aResp.GetId);
+      AssertEquals('succeeded', aResp.GetStatus);
+      AssertEquals('pay_789', aResp.PaymentId);
+    finally
+      aResp.Free;
+    end;
+  finally
+    // aRaw freed in Destroy
+  end;
+end;
+
 procedure TTestYooKassa.TestReceiptEmptyCustomer;
 var
   aReceipt: TYookassaReceipt;
@@ -350,6 +434,28 @@ begin
     end;
   finally
     aReceipt.Free;
+  end;
+end;
+
+procedure TTestYooKassa.TestReceiptItemsAutoFree;
+var
+  aReceipt: TYookassaReceipt;
+  aItem: TYookassaReceiptItem;
+  ItemCount: Integer;
+begin
+  ItemCount := 0;
+  aItem := TYookassaReceiptItem.Create;
+  aItem.Free; // check that works
+  Inc(ItemCount);
+
+  aReceipt := TYookassaReceipt.Create;
+  try
+    aItem := TYookassaReceiptItem.Create;
+    aItem.Description := 'Автосвобождение';
+    aReceipt.AddItem(aItem);
+    // aItem now belongs to the list
+  finally
+    aReceipt.Free; // Must be call Free of all items
   end;
 end;
 

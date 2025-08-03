@@ -5,7 +5,7 @@ unit yookassa_api;
 interface
 
 uses
-  Classes, windows, SysUtils, fpjson, jsonparser, fphttpclient, base64, fgl
+  Classes, SysUtils, fpjson, jsonparser, fphttpclient, base64, fgl
   ;
 
 type
@@ -533,7 +533,7 @@ end;
 
 function TYookassaReceiptRequest.CreateResponse(aRaw: TJSONObject): TYookassaResponse;
 begin
-  Result:=TYookassaReceiptResponse.Create(ARaw);;
+  Result:=TYookassaReceiptResponse.Create(ARaw);
 end;
 
 function TYookassaReceiptRequest.GetEndpoint: string;

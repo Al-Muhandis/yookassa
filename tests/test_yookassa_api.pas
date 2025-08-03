@@ -22,7 +22,6 @@ type
   TYookassaReceiptRequestTest = class(TYookassaReceiptRequest)
   public
     function BuildRequestJSONTest: String;
-    function ParseResponse(const AResponse: String): TJSONObject; override;
   end;
 
   { TTestYooKassa }
@@ -42,7 +41,6 @@ type
     procedure TestReceiptWithTaxSystemCodeToJSON;
     procedure TestReceiptRequestBuildJSON;
     procedure TestReceiptRequestBuildRefundJSON;
-    procedure TestReceiptRequestParseSuccessResponse;
     procedure TestReceiptRequestCreate;
     procedure TestReceiptEmptyCustomer;
   end;
@@ -61,11 +59,6 @@ end;
 function TYookassaReceiptRequestTest.BuildRequestJSONTest: String;
 begin
   Result:=BuildRequestJSON;
-end;
-
-function TYookassaReceiptRequestTest.ParseResponse(const AResponse: String): TJSONObject;
-begin
-  Result:=inherited ParseResponse(AResponse);
 end;
 
 procedure TTestYooKassa.SetUp;
@@ -287,21 +280,6 @@ begin
     AssertTrue(aParsedJSON.Find('receipt') <> nil);
   finally
     aParsedJSON.Free;
-  end;
-end;
-
-procedure TTestYooKassa.TestReceiptRequestParseSuccessResponse;
-var
-  aJSON: String;
-  aResp: TJSONObject;
-begin
-  aJSON := '{"id":"receipt_123","status":"succeeded","type":"payment","send":true}';
-  try
-    aResp := FReceiptRequest.ParseResponse(aJSON);
-    AssertTrue(FReceiptRequest.ReceiptID='receipt_123');
-    AssertTrue('succeeded'=aResp.Strings['status']);
-  finally
-    aResp.Free;
   end;
 end;
 

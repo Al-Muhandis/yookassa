@@ -11,9 +11,42 @@ uses
 type
   TYookassaLogEvent = procedure(aEvent: TEventType; const Msg: string) of object;
 
+  { TYookassaResponse }
+  TYookassaResponse = class
+  private
+    FRaw: TJSONObject;
+  public
+    constructor Create(ARaw: TJSONObject);
+    destructor Destroy; override;
+    property Raw: TJSONObject read FRaw;
+    function GetId: string; virtual; abstract;
+    function GetStatus: string; virtual; abstract;
+  end;
+
+  { TYookassaPaymentResponse }
+  TYookassaPaymentResponse = class(TYookassaResponse) 
+  private
+    function GetConfirmationURL: string;
+    function GetAmount: Currency;
+  public
+    function GetId: string; override;
+    function GetStatus: string; override;
+    property ConfirmationURL: string read GetConfirmationURL;
+    property Amount: Currency read GetAmount;
+  end;
+
+  { TYookassaReceiptResponse }
+  TYookassaReceiptResponse = class(TYookassaResponse)
+  private
+    function GetPaymentId: String;
+  public
+    function GetId: string; override;
+    function GetStatus: string; override;
+    property PaymentId: string read GetPaymentId;
+  end;
+
   { Base class for request at YooKassa API }
   { TYookassaRequest }
-
   TYookassaRequest = class
   private
     FApiBaseUrl: string;
@@ -26,9 +59,9 @@ type
     procedure Log(aEvent: TEventType; const Msg: string);
   protected
     function BuildRequestJSON: string; virtual; abstract;
+    function CreateResponse(aRaw: TJSONObject): TYookassaResponse; virtual; abstract;
     function GetEndpoint: string; virtual; abstract;
     function GetMethod: string; virtual;
-    function ParseResponse(const AResponse: String): TJSONObject; virtual;
     function DoExecute: String;
   public
     property OnLog: TYookassaLogEvent read FOnLog write FOnLog;
@@ -36,7 +69,7 @@ type
     property SecretKey: string read FSecretKey write FSecretKey;
     constructor Create; virtual;
     destructor Destroy; override;
-    function Execute: TJSONObject;
+    function Execute: TYookassaResponse;
   end;
 
   { TYookassaReceiptItem }
@@ -80,19 +113,17 @@ type
   { TYookassaReceiptRequest }
   TYookassaReceiptRequest = class(TYookassaRequest)
   private
-    FReceiptID: String;
     FReceiptType: string;
     FPaymentId: string;
     FRefundId: string;
     FReceipt: TYookassaReceipt;
     FSend: Boolean;
     FSettlements: TJSONArray;
-    FStatus: String;
     function GetReceipt: TYookassaReceipt;
   protected
     function BuildRequestJSON: string; override;
+    function CreateResponse(aRaw: TJSONObject): TYookassaResponse; override;
     function GetEndpoint: string; override;
-    function ParseResponse(const AResponse: String): TJSONObject; override;
   public
     constructor Create; override;
     destructor Destroy; override;
@@ -105,15 +136,12 @@ type
     class function CreateReceipt(const aShopId, aSecretKey: string;
       aReceipt: TYookassaReceipt; const aReceiptType: string = 'payment';
       const aPaymentId: string = ''; aSend: Boolean = True): String;
-    property ReceiptID: String read FReceiptID;
-    property Status: String read FStatus;
   end;
 
  { TYookassaPaymentRequest }
   TYookassaPaymentRequest = class(TYookassaRequest)
   private
     FAmount: Currency;
-    FConfirmationURL: String;
     FCurrency: string;
     FDescription: string;
     FReturnUrl: string;
@@ -123,9 +151,9 @@ type
     function BuildConfirmationJSON: TJSONObject;
     function BuildMetadataJSON: TJSONObject;
   protected
-    function BuildRequestJSON: string; override;
+    function BuildRequestJSON: string; override;  
+    function CreateResponse(aRaw: TJSONObject): TYookassaResponse; override;
     function GetEndpoint: string; override;
-    function ParseResponse(const AResponse: String): TJSONObject; override;
   public
     destructor Destroy; override;
     property Amount: Currency read FAmount write FAmount;
@@ -136,7 +164,6 @@ type
     property MetaOrderId: string read FMetaOrderId write FMetaOrderId;
     class function CreatePayment(const aShopId, aSecretKey: string; aAmount: Currency;
       const aCurrency, aDescription, aReturnUrl: string): string;
-    property ConfirmationURL: String read FConfirmationURL;
   end;
 
 implementation
@@ -163,6 +190,66 @@ begin
     on E: Exception do
       Exit(False);
   end;
+end;
+
+{ TYookassaResponse }
+
+constructor TYookassaResponse.Create(ARaw: TJSONObject);
+begin
+  FRaw:=ARaw;
+end;
+
+destructor TYookassaResponse.Destroy;
+begin
+  FRaw.Free;
+  inherited Destroy;
+end;
+
+{ TYookassaPaymentResponse }
+
+function TYookassaPaymentResponse.GetId: string;
+begin
+  Result := Raw.Get('id', '');
+end;
+
+function TYookassaPaymentResponse.GetStatus: string;
+begin
+  Result := Raw.Get('status', '');
+end;
+
+function TYookassaPaymentResponse.GetConfirmationURL: string;
+begin
+  if Assigned(Raw.Find('confirmation')) then
+    Result := Raw.Objects['confirmation'].Get('confirmation_url', '')
+  else
+    Result := '';
+end;
+
+function TYookassaPaymentResponse.GetAmount: Currency;
+var
+  ValueStr: string;
+begin
+  Result := 0;
+  ValueStr := Raw.FindPath('amount.value').AsString;
+  if ValueStr <> '' then
+    Result := StrToCurr(ValueStr);
+end;
+
+{ TYookassaReceiptResponse }
+
+function TYookassaReceiptResponse.GetPaymentId: String;
+begin
+  Result := Raw.Get('payment_id', EmptyStr);
+end;
+
+function TYookassaReceiptResponse.GetId: string;
+begin
+  Result := Raw.Get('id', EmptyStr);
+end;
+
+function TYookassaReceiptResponse.GetStatus: string;
+begin
+  Result := Raw.Get('status', '');
 end;
 
 { TYookassaRequest }
@@ -208,11 +295,6 @@ end;
 function TYookassaRequest.GetMethod: string;
 begin
   Result := 'POST';
-end;
-
-function TYookassaRequest.ParseResponse(const AResponse: String): TJSONObject;
-begin
-  Result:=TJSONObject(GetJSON(AResponse));
 end;
 
 function TYookassaRequest.DoExecute: String;
@@ -279,12 +361,19 @@ begin
   end;
 end;
 
-function TYookassaRequest.Execute: TJSONObject;
+function TYookassaRequest.Execute: TYookassaResponse;
 var
-  aResp: String;
+  RespStr: string;
+  RespJSON: TJSONObject;
 begin
-  aResp := DoExecute;
-  Result := ParseResponse(aResp); // can be modified in descendants
+  RespStr := DoExecute;
+  RespJSON := TJSONObject(GetJSON(RespStr));
+  try
+    Result := CreateResponse(RespJSON); // abstract factory method
+    RespJSON := nil;
+  finally
+    RespJSON.Free;
+  end;
 end;
 
 { TYookassaReceiptItem }
@@ -442,6 +531,11 @@ begin
   end;
 end;
 
+function TYookassaReceiptRequest.CreateResponse(aRaw: TJSONObject): TYookassaResponse;
+begin
+  Result:=TYookassaReceiptResponse.Create(ARaw);;
+end;
+
 function TYookassaReceiptRequest.GetEndpoint: string;
 begin
   Result := FApiBaseUrl + '/receipts';
@@ -471,7 +565,7 @@ class function TYookassaReceiptRequest.CreateReceipt(const aShopId, aSecretKey: 
   const aReceiptType: string; const aPaymentId: string; aSend: Boolean): String;
 var
   aReceiptReq: TYookassaReceiptRequest;
-  aResp: TJSONObject;
+  aResp: TYookassaReceiptResponse;
 begin
   aReceiptReq := TYookassaReceiptRequest.Create;
   try
@@ -481,23 +575,15 @@ begin
     aReceiptReq.FReceiptType := aReceiptType;
     aReceiptReq.FPaymentId := aPaymentId;
     aReceiptReq.FSend := aSend;
-    aResp := aReceiptReq.Execute;
+    aResp := aReceiptReq.Execute as TYookassaReceiptResponse;
     try
-      Result := aResp.Get('confirmation_url', '');
+      Result := aResp.GetId;
     finally
       aResp.Free;
     end;
   finally
     aReceiptReq.Free;
   end;
-end;
-
-function TYookassaReceiptRequest.ParseResponse(const AResponse: String): TJSONObject;
-begin
-  Result:=inherited ParseResponse(AResponse);
-    // Get receipt ID
-  FReceiptID := Result.Get('id', EmptyStr);
-  FStatus := Result.Get('status', EmptyStr);
 end;
 
 { TYookassaPaymentRequest }
@@ -520,6 +606,11 @@ function TYookassaPaymentRequest.BuildMetadataJSON: TJSONObject;
 begin
   Result := TJSONObject.Create;
   Result.Add('order_id', FMetaOrderId);
+end;
+
+function TYookassaPaymentRequest.CreateResponse(aRaw: TJSONObject): TYookassaResponse;
+begin
+  Result := TYookassaPaymentResponse.Create(ARaw);
 end;
 
 function TYookassaPaymentRequest.BuildRequestJSON: string;
@@ -552,20 +643,11 @@ begin
   Result := FApiBaseUrl + '/payments';
 end;
 
-function TYookassaPaymentRequest.ParseResponse(const AResponse: String): TJSONObject;
-begin
-  Result:=inherited ParseResponse(AResponse);
-  if Assigned(Result.Find('confirmation')) then
-    FConfirmationURL := Result.Objects['confirmation'].Get('confirmation_url', '')
-  else
-    FCOnfirmationURL := EmptyStr;
-end;
-
 class function TYookassaPaymentRequest.CreatePayment(const aShopId, aSecretKey: string;
   aAmount: Currency; const aCurrency, aDescription, aReturnUrl: string): string;
 var
   aPayment: TYookassaPaymentRequest;
-  aResp: TJSONObject;
+  aResp: TYookassaPaymentResponse;
 begin
   aPayment := TYookassaPaymentRequest.Create;
   try
@@ -575,9 +657,9 @@ begin
     aPayment.Currency := aCurrency;
     aPayment.Description := aDescription;
     aPayment.ReturnUrl := aReturnUrl;
-    aResp := aPayment.Execute;
+    aResp := aPayment.Execute as TYookassaPaymentResponse;
     try
-      Result := aResp.Get('confirmation_url', '');
+      Result := aResp.ConfirmationURL;
     finally
       aResp.Free;
     end;

@@ -390,44 +390,49 @@ var
   aMarkCodeBytes: String;
 begin
   Result := TJSONObject.Create;
-  Result.Add('description', Description);
-  Result.Add('quantity', Quantity);
-  aAmount := TJSONObject.Create;
-  aAmount.Add('value', Format('%.2f', [AmountValue], _FrmtStngsJSON));
-  aAmount.Add('currency', AmountCurrency);
-  Result.Add('amount', aAmount);
-  Result.Add('vat_code', VatCode);
-  if PaymentMode <> '' then Result.Add('payment_mode', PaymentMode);
-  if PaymentSubject <> '' then Result.Add('payment_subject', PaymentSubject);
-  if MarkMode >= 0 then
-  begin
-    Result.Add('mark_mode', MarkMode);
+  try
+    Result.Add('description', Description);
+    Result.Add('quantity', Quantity);
+    aAmount := TJSONObject.Create;
+    aAmount.Add('value', Format('%.2f', [AmountValue], _FrmtStngsJSON));
+    aAmount.Add('currency', AmountCurrency);
+    Result.Add('amount', aAmount);
+    Result.Add('vat_code', VatCode);
+    if PaymentMode <> '' then Result.Add('payment_mode', PaymentMode);
+    if PaymentSubject <> '' then Result.Add('payment_subject', PaymentSubject);
+    if MarkMode >= 0 then
+    begin
+      Result.Add('mark_mode', MarkMode);
 
-    // check MarkCodeInfo
-    if MarkCodeInfo = '' then
-      raise EYooKassaValidationError.Create('MarkCodeInfo is required when MarkMode is set');
+      // check MarkCodeInfo
+      if MarkCodeInfo = '' then
+        raise EYooKassaValidationError.Create('MarkCodeInfo is required when MarkMode is set');
 
-    if not IsValidBase64(MarkCodeInfo) then
-      raise EYooKassaValidationError.Create('MarkCodeInfo is not a valid base64 string');
+      if not IsValidBase64(MarkCodeInfo) then
+        raise EYooKassaValidationError.Create('MarkCodeInfo is not a valid base64 string');
 
-    // Optional: length check after decoding
-    try
-      aMarkCodeBytes := DecodeStringBase64(MarkCodeInfo);
-      if (Length(aMarkCodeBytes) < 30) or (Length(aMarkCodeBytes) > 100) then
-        raise EYooKassaValidationError.Create('MarkCodeInfo has invalid length after decoding (expected 30–100 bytes)');
-    except
-      on E: Exception do
-        raise EYooKassaValidationError.Create('MarkCodeInfo decoding error: ' + E.Message);
+      // Optional: length check after decoding
+      try
+        aMarkCodeBytes := DecodeStringBase64(MarkCodeInfo);
+        if (Length(aMarkCodeBytes) < 30) or (Length(aMarkCodeBytes) > 100) then
+          raise EYooKassaValidationError.Create('MarkCodeInfo has invalid length after decoding (expected 30–100 bytes)');
+      except
+        on E: Exception do
+          raise EYooKassaValidationError.Create('MarkCodeInfo decoding error: ' + E.Message);
+      end;
+
+      // add to JSON
+      aMarkCodeInfo := TJSONObject.Create;
+      aMarkCodeInfo.Add('gs_1m', MarkCodeInfo);
+      Result.Add('mark_code_info', aMarkCodeInfo);
     end;
 
-    // add to JSON
-    aMarkCodeInfo := TJSONObject.Create;
-    aMarkCodeInfo.Add('gs_1m', MarkCodeInfo);
-    Result.Add('mark_code_info', aMarkCodeInfo);
+    if Measure <> '' then
+      Result.Add('measure', Measure);
+  except
+    FreeAndNil(Result);
+    raise;
   end;
-
-  if Measure <> '' then
-    Result.Add('measure', Measure);
 end;
 
 { TYookassaReceipt }

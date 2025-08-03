@@ -30,6 +30,8 @@ type
   private
     FYookassaAPI: TYookassaPaymentTest;
     FReceiptRequest: TYookassaReceiptRequestTest;
+    FTestItem: TYookassaReceiptItem;
+    procedure CallToJSON;
   protected
     procedure SetUp; override;
     procedure TearDown; override;
@@ -43,9 +45,14 @@ type
     procedure TestReceiptRequestBuildRefundJSON;
     procedure TestReceiptRequestCreate;
     procedure TestReceiptEmptyCustomer;
+    procedure TestMarkCodeInfoValidation;
   end;
 
 implementation
+
+uses
+  yookassa_exceptions
+  ;
 
 { TYookassaPaymentTest }
 
@@ -59,6 +66,14 @@ end;
 function TYookassaReceiptRequestTest.BuildRequestJSONTest: String;
 begin
   Result:=BuildRequestJSON;
+end;
+
+procedure TTestYooKassa.CallToJSON;
+var
+  aJSON: TJSONObject;
+begin
+  aJSON:=FTestItem.ToJSON;
+  aJSON.Free;
 end;
 
 procedure TTestYooKassa.SetUp;
@@ -335,6 +350,46 @@ begin
     end;
   finally
     aReceipt.Free;
+  end;
+end;
+
+procedure TTestYooKassa.TestMarkCodeInfoValidation;
+var
+  aItem: TYookassaReceiptItem;
+  aJSON: TJSONObject;
+begin
+  aItem := TYookassaReceiptItem.Create;
+  try
+    aItem.Description := 'Товар с маркировкой';
+    aItem.Quantity := 1;
+    aItem.AmountValue := 100.00;
+    aItem.AmountCurrency := 'RUB';
+    aItem.VatCode := 1;
+    aItem.MarkMode := 2; // Requires MarkCodeInfo
+
+    FTestItem := aItem;
+    // Empty MarkCodeInfo → error
+    aItem.MarkCodeInfo := EmptyStr;
+    AssertException(EYooKassaValidationError, @CallToJSON);
+
+    // Invalid base64
+    aItem.MarkCodeInfo := 'invalid_base64_%%%';
+    AssertException(EYooKassaValidationError, @CallToJSON);
+
+    // too short after decoding
+    aItem.MarkCodeInfo := 'AA=='; // 2 bytes
+    AssertException(EYooKassaValidationError, @CallToJSON);
+
+    // valid base64 (length > 30)
+    aItem.MarkCodeInfo := 'AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyAhIiMkJSYnKCkqKywtLi8wMTIzNDU2Nzg5Ojs8PT4/P0BBQUJD';
+    aJSON:=aItem.ToJSON;
+    try
+      AssertNotNull(aJSON); // must be passed
+    finally
+      aJSON.Free;
+    end;
+  finally
+    aItem.Free;
   end;
 end;
 

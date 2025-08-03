@@ -16,11 +16,13 @@ type
 
   TYookassaRequest = class
   private
+    FApiBaseUrl: string;
     FOnLog: TYookassaLogEvent;
     FShopId: string;
-    FSecretKey: string;
-    function GetAuthHeader: string;
+    FSecretKey: string;                     
     function GenerateIdempotenceKey: string;
+    function GetAuthHeader: string;
+    function GetDefaultApiBaseUrl: string;
     procedure Log(aEvent: TEventType; const Msg: string);
   protected
     function BuildRequestJSON: string; virtual; abstract;
@@ -146,11 +148,15 @@ uses
 var
   _FrmtStngsJSON: TFormatSettings;
 
+const
+  _YK_DEFAULT_API_URL = 'https://api.yookassa.ru/v3';
+
 { TYookassaRequest }
 
 constructor TYookassaRequest.Create;
 begin
   inherited Create;
+  FApiBaseUrl := GetDefaultApiBaseUrl;
 end;
 
 destructor TYookassaRequest.Destroy;
@@ -161,6 +167,11 @@ end;
 function TYookassaRequest.GetAuthHeader: string;
 begin
   Result := 'Basic ' + EncodeStringBase64(FShopId + ':' + FSecretKey);
+end;
+
+function TYookassaRequest.GetDefaultApiBaseUrl: string;
+begin
+  Result := _YK_DEFAULT_API_URL;
 end;
 
 function TYookassaRequest.GenerateIdempotenceKey: string;
@@ -390,7 +401,7 @@ end;
 
 function TYookassaReceiptRequest.GetEndpoint: string;
 begin
-  Result:='https://api.yookassa.ru/v3/receipts';
+  Result := FApiBaseUrl + '/receipts';
 end;
 
 constructor TYookassaReceiptRequest.Create;
@@ -490,7 +501,7 @@ end;
 
 function TYookassaPaymentRequest.GetEndpoint: string;
 begin
-  Result := 'https://api.yookassa.ru/v3/payments';
+  Result := FApiBaseUrl + '/payments';
 end;
 
 function TYookassaPaymentRequest.ParseResponse(const AResponse: String): TJSONObject;

@@ -18,7 +18,7 @@ type
     FReceiptResp: TYookassaReceiptResponse;
     FPaymentRequest: TYookassaPaymentRequest;
     FReceiptRequest: TYookassaReceiptRequest;
-    class procedure LoadConfig(aPayment: TYookassaPaymentRequest);
+    class procedure LoadPaymentConfig(aPaymentRequest: TYookassaPaymentRequest);
     class procedure LoadReceiptConfig(aReceiptRequest: TYookassaReceiptRequest);
     procedure UpdateTestReceipt(TestReceipt: TYookassaReceipt; aAmount: Currency; const aCurrency: string);
   protected
@@ -41,18 +41,18 @@ uses
   IniFiles
   ;
 
-class procedure TTestYooKassaIntegration.LoadConfig(aPayment: TYookassaPaymentRequest);
+class procedure TTestYooKassaIntegration.LoadPaymentConfig(aPaymentRequest: TYookassaPaymentRequest);
 var
   aIni: TIniFile;
 begin
   aIni := TIniFile.Create(ExtractFilePath(ParamStr(0)) + 'config.ini');
   try
-    aPayment.ShopId     := aIni.ReadString('shop', 'ShopId', '');
-    aPayment.SecretKey  := aIni.ReadString('shop', 'SecretKey', '');
-    aPayment.Amount     := aIni.ReadFloat ('order', 'Amount', 10.00);
-    aPayment.Currency   := aIni.ReadString('order', 'Currency', 'RUB');
-    aPayment.Description:= aIni.ReadString('order', 'Description', 'Тест с чеком');
-    aPayment.ReturnUrl  := aIni.ReadString('order', 'ReturnUrl', 'https://example.com/return');
+    aPaymentRequest.ShopId     := aIni.ReadString('shop', 'ShopId', '');
+    aPaymentRequest.SecretKey  := aIni.ReadString('shop', 'SecretKey', '');
+    aPaymentRequest.Amount     := aIni.ReadFloat ('order', 'Amount', 10.00);
+    aPaymentRequest.Currency   := aIni.ReadString('order', 'Currency', 'RUB');
+    aPaymentRequest.Description:= aIni.ReadString('order', 'Description', 'Тест с чеком');
+    aPaymentRequest.ReturnUrl  := aIni.ReadString('order', 'ReturnUrl', 'https://example.com/return');
   finally
     aIni.Free;
   end;
@@ -95,6 +95,8 @@ begin
   inherited SetUp;
   FPaymentRequest := TYookassaPaymentRequest.Create;
   FReceiptRequest := TYookassaReceiptRequest.Create;
+  FPaymentResp := nil;
+  FReceiptResp := nil;
 end;
 
 procedure TTestYooKassaIntegration.TearDown;
@@ -132,7 +134,7 @@ end;
 
 procedure TTestYooKassaIntegration.TestCreatePayment_Sandbox;
 begin
-  LoadConfig(FPaymentRequest);
+  LoadPaymentConfig(FPaymentRequest);
   FPaymentResp := FPaymentRequest.Execute as TYookassaPaymentResponse;
   AssertTrue('confirmation_url must be exists', Pos('http', FPaymentResp.ConfirmationURL) = 1);
 end;
@@ -143,7 +145,7 @@ var
   aReceipt: TYookassaReceipt;
   aItem: TYookassaReceiptItem;
 begin
-  LoadConfig(FPaymentRequest);
+  LoadPaymentConfig(FPaymentRequest);
   aReceipt := TYookassaReceipt.Create;
   aReceipt.CustomerEmail := 'user@example.com';
 
@@ -174,6 +176,7 @@ begin
 
   AssertTrue('Receipt ID must be present', FReceiptResp.GetId <> '');
   AssertTrue('Receipt ID should contain receipt prefix', Pos('receipt', FReceiptResp.GetId) > 0);
+  AssertTrue('PaymentId should be present', FReceiptResp.PaymentId <> '');
 end;
 
 procedure TTestYooKassaIntegration.TestCreateReceiptWithPhone_Sandbox;
@@ -192,13 +195,11 @@ begin
 end;
 
 procedure TTestYooKassaIntegration.TestCreateReceiptWithTaxSystem_Sandbox;
-var
-  aReceipt: TYookassaReceipt;
 begin
   LoadReceiptConfig(FReceiptRequest);
 
   UpdateTestReceipt(FReceiptRequest.Receipt, 120.00, 'RUB');
-  aReceipt.TaxSystemCode := 1; // УСН income
+  FReceiptRequest.Receipt.TaxSystemCode := 1; // УСН income
 
   FReceiptRequest.ReceiptType := 'payment';
 
@@ -213,7 +214,7 @@ var
   aPaymentId: String;
 begin
   // First, we create a payment to receive the payment_id
-  LoadConfig(FPaymentRequest);
+  LoadPaymentConfig(FPaymentRequest);
 
   UpdateTestReceipt(FReceiptRequest.Receipt, 30.00, 'RUB');
   FPaymentResp := FPaymentRequest.Execute as TYookassaPaymentResponse;
@@ -222,11 +223,11 @@ begin
   aPaymentId := FPaymentResp.GetId;
   AssertTrue('Payment ID must be present for refund test', aPaymentId <> '');
 
-  // Теперь создаем чек возврата
+  // Create refund receipt now
   LoadReceiptConfig(FReceiptRequest);
   FReceiptRequest.ReceiptType := 'refund';
   FReceiptRequest.PaymentId := aPaymentId;
-  FReceiptRequest.Send := False; // Не отправляем чек возврата клиенту
+  FReceiptRequest.Send := False; // Do not send refund receipt to client
 
   FReceiptResp := FReceiptRequest.Execute as TYookassaReceiptResponse;
 

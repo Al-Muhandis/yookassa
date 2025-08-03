@@ -295,13 +295,35 @@ begin
   Result.Add('vat_code', VatCode);
   if PaymentMode <> '' then Result.Add('payment_mode', PaymentMode);
   if PaymentSubject <> '' then Result.Add('payment_subject', PaymentSubject);
-  if MarkMode >= 0 then Result.Add('mark_mode', MarkMode);
-  if MarkCodeInfo <> '' then begin
+  if MarkMode >= 0 then
+  begin
+    Result.Add('mark_mode', MarkMode);
+
+    // check MarkCodeInfo
+    if MarkCodeInfo = '' then
+      raise EYooKassaValidationError.Create('MarkCodeInfo is required when MarkMode is set');
+
+    if not IsValidBase64(MarkCodeInfo) then
+      raise EYooKassaValidationError.Create('MarkCodeInfo is not a valid base64 string');
+
+    // Optional: length check after decoding
+    try
+      MarkCodeBytes := DecodeStringBase64(MarkCodeInfo);
+      if (Length(MarkCodeBytes) < 30) or (Length(MarkCodeBytes) > 100) then
+        raise EYooKassaValidationError.Create('MarkCodeInfo has invalid length after decoding (expected 30–100 bytes)');
+    except
+      on E: Exception do
+        raise EYooKassaValidationError.Create('MarkCodeInfo decoding error: ' + E.Message);
+    end;
+
+    // add to JSON
     aMarkCodeInfo := TJSONObject.Create;
     aMarkCodeInfo.Add('gs_1m', MarkCodeInfo);
     Result.Add('mark_code_info', aMarkCodeInfo);
   end;
-  if Measure <> '' then Result.Add('measure', Measure);
+
+  if Measure <> '' then
+    Result.Add('measure', Measure);
 end;
 
 { TYookassaReceipt }

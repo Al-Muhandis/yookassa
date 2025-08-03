@@ -9,15 +9,19 @@ uses
   ;
 
 type
+  TYookassaLogEvent = procedure(aEvent: TEventType; const Msg: string) of object;
+
   { Base class for request at YooKassa API }
   { TYookassaRequest }
 
   TYookassaRequest = class
   private
+    FOnLog: TYookassaLogEvent;
     FShopId: string;
     FSecretKey: string;
     function GetAuthHeader: string;
     function GenerateIdempotenceKey: string;
+    procedure Log(aEvent: TEventType; const Msg: string);
   protected
     function BuildRequestJSON: string; virtual; abstract;
     function GetEndpoint: string; virtual; abstract;
@@ -25,6 +29,7 @@ type
     function ParseResponse(const AResponse: String): TJSONObject; virtual;
     function DoExecute: String;
   public
+    property OnLog: TYookassaLogEvent read FOnLog write FOnLog;
     property ShopId: string read FShopId write FShopId;
     property SecretKey: string read FSecretKey write FSecretKey;
     constructor Create; virtual;
@@ -163,6 +168,12 @@ begin
   Result := IntToHex(Random(MaxInt), 8) + IntToStr(Random(MaxInt));
 end;
 
+procedure TYookassaRequest.Log(aEvent: TEventType; const Msg: string);
+begin
+  if Assigned(FOnLog) then
+    FOnLog(aEvent, Msg);
+end;
+
 function TYookassaRequest.GetMethod: string;
 begin
   Result := 'POST';
@@ -179,46 +190,61 @@ var
   aRespStr: RawByteString;
   aReqStream: TStringStream;
   ErrJSON: TJSONObject;
+  aReqJSON, aIdempotenceKey: String;
 begin
   Result := EmptyStr;
-  aHttp := TFPHttpClient.Create(nil);
   try
-    // --- PRE-REQUEST VALIDATION ---
-    EYooKassaValidationError.RaiseIfEmpty(FShopId, 'ShopId');
-    EYooKassaValidationError.RaiseIfEmpty(FSecretKey, 'SecretKey');
-
-    aHttp.AddHeader('Authorization', GetAuthHeader);
-    aHttp.AddHeader('Content-Type', 'application/json');
-    aHttp.AddHeader('Idempotence-Key', GenerateIdempotenceKey);
-
-    aReqStream := TStringStream.Create(BuildRequestJSON);
+    aHttp := TFPHttpClient.Create(nil);
     try
-      aHttp.RequestBody := aReqStream;
-      if GetMethod = 'POST' then
-        aRespStr := aHttp.Post(GetEndpoint)
-      else
-      begin
-        raise Exception.Create('HTTP method not supported: ' + GetMethod);
-      end;
-    finally
-      aHttp.RequestBody.Free;
-    end;
+      // --- PRE-REQUEST VALIDATION ---
+      EYooKassaValidationError.RaiseIfEmpty(FShopId, 'ShopId');
+      EYooKassaValidationError.RaiseIfEmpty(FSecretKey, 'SecretKey');
 
-    // Checking the status (API error)
-    if aHttp.ResponseStatusCode >= 400 then
-    begin
+      aReqJSON:=BuildRequestJSON;
+
+      aHttp.AddHeader('Authorization', GetAuthHeader);
+      aHttp.AddHeader('Content-Type', 'application/json');
+      aIdempotenceKey:=GenerateIdempotenceKey;
+      aHttp.AddHeader('Idempotence-Key', aIdempotenceKey);
+
+      Log(etDebug, Format('YooKassa Request (%s): %s. Idempotence-Key: %s', [GetEndpoint, aReqJSON, aIdempotenceKey]));
+
+      aReqStream := TStringStream.Create(aReqJSON);
       try
-        ErrJSON := TJSONObject(GetJSON(aRespStr));
-      except
-        on E: Exception do
-          raise EYooKassaError.CreateFmt('Invalid error response from YooKassa: %s', [aRespStr]);
+        aHttp.RequestBody := aReqStream;
+        if GetMethod = 'POST' then
+          aRespStr := aHttp.Post(GetEndpoint)
+        else
+        begin
+          raise Exception.Create('HTTP method not supported: ' + GetMethod);
+        end;
+      finally
+        aHttp.RequestBody.Free;
       end;
-      raise EYooKassaError.CreateFromResponse(aHttp.ResponseStatusCode, ErrJSON);
-    end;
+      Log(etDebug, Format('Response (status: %d): %s', [aHttp.ResponseStatusCode, aRespStr]));
 
-    Result := aRespStr;
-  finally
-    aHttp.Free;
+      // Checking the status (API error)
+      if aHttp.ResponseStatusCode >= 400 then
+      begin
+        try
+          ErrJSON := TJSONObject(GetJSON(aRespStr));
+        except
+          on E: Exception do
+            raise EYooKassaError.CreateFmt('Invalid error response from YooKassa: %s', [aRespStr]);
+        end;
+        raise EYooKassaError.CreateFromResponse(aHttp.ResponseStatusCode, ErrJSON);
+      end;
+
+      Result := aRespStr;
+    finally
+      aHttp.Free;
+    end;
+  except
+    on E: Exception do
+    begin
+      Log(etError, 'Error: ' + E.Message);
+      raise; // passing on
+    end;
   end;
 end;
 

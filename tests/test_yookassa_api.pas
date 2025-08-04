@@ -21,7 +21,19 @@ type
 
   TYookassaReceiptRequestTest = class(TYookassaCreateReceiptRequest)
   public
-    function BuildRequestJSONTest: String;
+    function BuildRequestJSON: String; override;
+  end;
+
+  { TTestableGetPaymentRequest }
+
+  TTestableGetPaymentRequest = class(TYookassaGetPaymentRequest)
+  private
+    class var FTestRaw: TJSONObject;
+  protected
+    function DoExecute: String; override;
+    function BuildRequestJSON: string; override;
+    function CreateResponse(aRaw: TJSONObject): TYookassaResponse; override;
+    class property TestRaw: TJSONObject read FTestRaw write FTestRaw;
   end;
 
   { TTestYooKassa }
@@ -40,6 +52,9 @@ type
   published
     procedure TestBuildRequestData;
     procedure TestCreatePaymentStatic;
+    procedure TestGetPaymentRequest_BuildRequestJSON;
+    procedure TestGetPaymentRequest_CreateResponse;
+    procedure TestGetPayment_StaticMethod;
     procedure TestPaymentResponseParsing;
     procedure TestReceiptEmptyCustomer;
     procedure TestReceiptItemsAutoFree;
@@ -71,10 +86,31 @@ end;
 
 { TYookassaReceiptRequestTest }
 
-function TYookassaReceiptRequestTest.BuildRequestJSONTest: String;
+function TYookassaReceiptRequestTest.BuildRequestJSON: String;
 begin
-  Result:=BuildRequestJSON;
+  Result:=inherited BuildRequestJSON;
 end;
+
+{ TTestableGetPaymentRequest }
+
+function TTestableGetPaymentRequest.DoExecute: String;
+begin
+  if not Assigned(FTestRaw) then
+    raise Exception.Create(Format('Set up json RAW for %s', [Self.ClassName]));
+  Result:=FTestRaw.AsJSON;
+end;
+
+function TTestableGetPaymentRequest.BuildRequestJSON: string;
+begin
+  Result:=inherited BuildRequestJSON;
+end;
+
+function TTestableGetPaymentRequest.CreateResponse(aRaw: TJSONObject): TYookassaResponse;
+begin
+  Result:=inherited CreateResponse(aRaw);
+end;
+
+{ TTestYooKassa }
 
 procedure TTestYooKassa.CallToJSON;
 var
@@ -125,6 +161,82 @@ end;
 procedure TTestYooKassa.TestCreatePaymentStatic;
 begin
   AssertException(EYooKassaValidationError, @CreatePaymentStaticHandler);
+end;
+
+procedure TTestYooKassa.TestGetPaymentRequest_BuildRequestJSON;
+var
+  aReq: TTestableGetPaymentRequest;
+begin
+  aReq := TTestableGetPaymentRequest.Create;
+  try
+    AssertEquals('GET request should have no body', '', aReq.BuildRequestJSON);
+  finally
+    aReq.Free;
+  end;
+end;
+
+procedure TTestYooKassa.TestGetPaymentRequest_CreateResponse;
+var
+  aReq: TTestableGetPaymentRequest;
+  aRaw: TJSONObject;
+  aResp: TYookassaPaymentResponse;
+begin
+  aRaw := TJSONObject.Create;
+  try
+    aRaw.Add('id', 'pay_123');
+    aRaw.Add('status', 'succeeded');
+    aRaw.Add('amount', TJSONObject.Create(['value', '100.00', 'currency', 'RUB']));
+
+    aReq := TTestableGetPaymentRequest.Create;
+    try
+      aResp := aReq.CreateResponse(aRaw) as TYookassaPaymentResponse;
+      try
+        AssertEquals('pay_123', aResp.ID);
+        AssertEquals('succeeded', aResp.GetStatus);
+        AssertEquals(100.00, (aResp).Amount);
+      finally
+        aResp.Free;
+      end;
+    finally
+      aReq.Free;
+    end;
+  finally
+    // aRaw destroying in Destroy aResp
+  end;
+end;
+
+procedure TTestYooKassa.TestGetPayment_StaticMethod;
+var
+  aResp: TYookassaPaymentResponse;
+  aRaw, aConfirmation: TJSONObject;
+begin
+  // Replacing Execute (in reality, you need to get mock, but a stub will do for the unit test)
+  // We can't call the real API, so we'll check that if Execute returns JSON, everything will be parsed.
+
+  // Creating a fake response
+  aRaw := TJSONObject.Create;
+  TTestableGetPaymentRequest.FTestRaw := aRaw;
+  try
+    aRaw.Add('id', 'pay_test_999');
+    aRaw.Add('status', 'waiting_for_capture');
+    aRaw.Add('amount', TJSONObject.Create(['value', '500.00', 'currency', 'RUB']));
+    aConfirmation := TJSONObject.Create;
+    aConfirmation.Add('confirmation_url', 'https://yookassa.ru/checkout/pay/test');
+    aRaw.Add('confirmation', aConfirmation);
+
+    // Call static method
+    aResp := TTestableGetPaymentRequest.GetPayment('test_shop', 'test_key', 'pay_test_999');
+    try
+      AssertEquals('pay_test_999', aResp.ID);
+      AssertEquals('waiting_for_capture', aResp.GetStatus);
+      AssertEquals(500.00, aResp.Amount);
+      AssertEquals('https://yookassa.ru/checkout/pay/test', aResp.ConfirmationURL);
+    finally
+      aResp.Free;
+    end;
+  finally
+    FreeAndNil(TTestableGetPaymentRequest.FTestRaw);
+  end;
 end;
 
 procedure TTestYooKassa.TestLogging;
@@ -231,8 +343,6 @@ begin
   end;
 end;
 
-// ========== НОВЫЕ ТЕСТЫ ДЛЯ ФУНКЦИОНАЛА ЧЕКОВ ==========
-
 procedure TTestYooKassa.TestReceiptWithPhoneToJSON;
 var
   aReceipt: TYookassaReceipt;
@@ -316,7 +426,7 @@ begin
   FReceiptRequest.ReceiptType := 'payment';
   FReceiptRequest.Send := True;
 
-  aJSON := FReceiptRequest.BuildRequestJSONTest;
+  aJSON := FReceiptRequest.BuildRequestJSON;
   aParsedJSON := TJSONObject(GetJSON(aJSON));
   try
     AssertEquals('payment', aParsedJSON.Strings['type']);
@@ -347,7 +457,7 @@ begin
   FReceiptRequest.PaymentId := 'payment_123456';
   FReceiptRequest.Send := False;
 
-  aJSON := FReceiptRequest.BuildRequestJSONTest;
+  aJSON := FReceiptRequest.BuildRequestJSON;
   aParsedJSON := TJSONObject(GetJSON(aJSON));
   try
     AssertEquals('refund', aParsedJSON.Strings['type']);

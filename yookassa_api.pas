@@ -63,7 +63,7 @@ type
     function CreateResponse(aRaw: TJSONObject): TYookassaResponse; virtual; abstract;
     function GetEndpoint: string; virtual; abstract;
     function GetMethod: string; virtual;
-    function DoExecute: String; 
+    function DoExecute: String; virtual;
     procedure Log(aEvent: TEventType; const Msg: string);
   public
     property OnLog: TYookassaLogEvent read FOnLog write FOnLog;
@@ -185,6 +185,20 @@ type
     property MetaOrderId: string read FMetaOrderId write FMetaOrderId;
     class function CreatePayment(const aShopId, aSecretKey: string; aAmount: Currency;
       const aCurrency, aDescription, aReturnUrl: string): string;
+  end;
+
+  { TYookassaGetPaymentRequest }
+  TYookassaGetPaymentRequest = class(TYookassaRequest)
+  private
+    FPaymentId: string;
+  protected
+    function BuildRequestJSON: string; override;
+    function GetEndpoint: string; override;
+    function GetMethod: string; override;
+    function CreateResponse(aRaw: TJSONObject): TYookassaResponse; override;
+  public
+    property PaymentId: string read FPaymentId write FPaymentId;
+    class function GetPayment(const aShopId, aSecretKey, aPaymentId: string): TYookassaPaymentResponse;
   end;
 
 implementation
@@ -346,10 +360,10 @@ begin
       aReqStream := TStringStream.Create(aReqJSON);
       try
         aHttp.RequestBody := aReqStream;
-        if GetMethod = 'POST' then
-          aRespStr := aHttp.Post(GetEndpoint)
+        case GetMethod of
+          'POST': aRespStr := aHttp.Post(GetEndpoint);
+          'GET':  aRespStr := aHttp.Get(GetEndpoint);
         else
-        begin
           raise Exception.Create('HTTP method not supported: ' + GetMethod);
         end;
       finally
@@ -733,6 +747,48 @@ destructor TYookassaCreatePaymentRequest.Destroy;
 begin
   FReceipt.Free;
   inherited Destroy;
+end;
+
+{ TYookassaGetPaymentRequest }
+
+function TYookassaGetPaymentRequest.GetMethod: string;
+begin
+  Result := 'GET';
+end;
+
+function TYookassaGetPaymentRequest.BuildRequestJSON: string;
+begin
+  Result := EmptyStr; // The GET request does not have a body
+end;
+
+function TYookassaGetPaymentRequest.GetEndpoint: string;
+begin
+  EYooKassaValidationError.RaiseIfEmpty(FPaymentId, 'PaymentId');
+  Result := FApiBaseUrl + '/payments/' + FPaymentId;
+end;
+
+function TYookassaGetPaymentRequest.CreateResponse(aRaw: TJSONObject): TYookassaResponse;
+begin
+  Result := TYookassaPaymentResponse.Create(aRaw);
+end;
+
+class function TYookassaGetPaymentRequest.GetPayment(const aShopId, aSecretKey,
+  aPaymentId: string): TYookassaPaymentResponse;
+var
+  aReq: TYookassaGetPaymentRequest;
+begin
+  Result := nil;
+  aReq := self.Create;
+  try
+    aReq.ShopId := aShopId;
+    aReq.SecretKey := aSecretKey;
+    aReq.PaymentId := aPaymentId;
+
+    // Make request
+    Result := aReq.Execute as TYookassaPaymentResponse;
+  finally
+    aReq.Free;
+  end;
 end;
 
 initialization

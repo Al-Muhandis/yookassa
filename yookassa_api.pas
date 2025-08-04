@@ -154,9 +154,8 @@ type
     property Receipt: TYookassaReceipt read GetReceipt write FReceipt;
     property Send: Boolean read FSend write FSend;
     property Settlements: TJSONArray read FSettlements write FSettlements;
-    class function CreateReceipt(const aShopId, aSecretKey: string;
-      aReceipt: TYookassaReceipt; const aReceiptType: string = 'payment';
-      const aPaymentId: string = ''; aSend: Boolean = True): String;
+    class function CreateReceipt(const aShopId, aSecretKey: string; aReceipt: TYookassaReceipt;
+      const aReceiptType: string; const aPaymentId: string; aSend: Boolean): TYookassaReceiptResponse;
   end;
 
  { TYookassaCreatePaymentRequest }
@@ -183,8 +182,8 @@ type
     property ReturnUrl: string read FReturnUrl write FReturnUrl;
     property Receipt: TYookassaReceipt read FReceipt write FReceipt;
     property MetaOrderId: string read FMetaOrderId write FMetaOrderId;
-    class function CreatePayment(const aShopId, aSecretKey: string; aAmount: Currency;
-      const aCurrency, aDescription, aReturnUrl: string): string;
+    class function CreatePayment(const aShopId, aSecretKey: string; aAmount: Currency; const aCurrency, aDescription,
+      aReturnUrl: string): TYookassaPaymentResponse;
   end;
 
   { TYookassaGetPaymentRequest }
@@ -636,26 +635,22 @@ begin
   Result:=FReceipt;
 end;
 
-class function TYookassaCreateReceiptRequest.CreateReceipt(const aShopId, aSecretKey: string; aReceipt: TYookassaReceipt;
-  const aReceiptType: string; const aPaymentId: string; aSend: Boolean): String;
+class function TYookassaCreateReceiptRequest.CreateReceipt(const aShopId, aSecretKey: string;
+  aReceipt: TYookassaReceipt; const aReceiptType: string; const aPaymentId: string;
+  aSend: Boolean): TYookassaReceiptResponse;
 var
   aReceiptReq: TYookassaCreateReceiptRequest;
-  aResp: TYookassaReceiptResponse;
 begin
-  aReceiptReq := TYookassaCreateReceiptRequest.Create;
+  aReceiptReq := self.Create;
   try
-    aReceiptReq.FShopId := aShopId;
-    aReceiptReq.FSecretKey := aSecretKey;
-    aReceiptReq.FReceipt := aReceipt;
-    aReceiptReq.FReceiptType := aReceiptType;
-    aReceiptReq.FPaymentId := aPaymentId;
-    aReceiptReq.FSend := aSend;
-    aResp := aReceiptReq.Execute as TYookassaReceiptResponse;
-    try
-      Result := aResp.GetId;
-    finally
-      aResp.Free;
-    end;
+    aReceiptReq.ShopId := aShopId;
+    aReceiptReq.SecretKey := aSecretKey;
+    aReceiptReq.Receipt := aReceipt;
+    aReceiptReq.ReceiptType := aReceiptType;
+    aReceiptReq.PaymentId := aPaymentId;
+    aReceiptReq.Send := aSend;
+
+    Result := aReceiptReq.Execute as TYookassaReceiptResponse;
   finally
     aReceiptReq.Free;
   end;
@@ -718,13 +713,12 @@ begin
   Result := FApiBaseUrl + '/payments';
 end;
 
-class function TYookassaCreatePaymentRequest.CreatePayment(const aShopId, aSecretKey: string;
-  aAmount: Currency; const aCurrency, aDescription, aReturnUrl: string): string;
+class function TYookassaCreatePaymentRequest.CreatePayment(const aShopId, aSecretKey: string; aAmount: Currency;
+  const aCurrency, aDescription, aReturnUrl: string): TYookassaPaymentResponse;
 var
   aPayment: TYookassaCreatePaymentRequest;
-  aResp: TYookassaPaymentResponse;
 begin
-  aPayment := TYookassaCreatePaymentRequest.Create;
+  aPayment := self.Create;
   try
     aPayment.ShopId := aShopId;
     aPayment.SecretKey := aSecretKey;
@@ -732,12 +726,8 @@ begin
     aPayment.Currency := aCurrency;
     aPayment.Description := aDescription;
     aPayment.ReturnUrl := aReturnUrl;
-    aResp := aPayment.Execute as TYookassaPaymentResponse;
-    try
-      Result := aResp.ConfirmationURL;
-    finally
-      aResp.Free;
-    end;
+
+    Result := aPayment.Execute as TYookassaPaymentResponse;
   finally
     aPayment.Free;
   end;

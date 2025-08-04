@@ -51,6 +51,7 @@ type
     procedure TestReceiptRequestBuildRefundJSON;
     procedure TestReceiptRequestCreate;
     procedure TestReceiptResponseParsing;
+    procedure TestSupplier_InReceiptItemToJSON;
     procedure TestLogging;
     procedure TestMarkCodeInfoValidation;
   end;
@@ -406,6 +407,43 @@ begin
     end;
   finally
     // aRaw freed in Destroy
+  end;
+end;
+
+procedure TTestYooKassa.TestSupplier_InReceiptItemToJSON;
+var
+  aItem: TYookassaReceiptItem;
+  aJSON, aSupplierJSON: TJSONObject;
+begin
+  aItem := TYookassaReceiptItem.Create;
+  try
+    // Fill product data
+    aItem.Description := 'Товар с поставщиком';
+    aItem.Quantity := 1.0;
+    aItem.AmountValue := 999.99;
+    aItem.AmountCurrency := 'RUB';
+    aItem.VatCode := 1;
+
+    // Fill Supplier (must be created automatically)
+    aItem.Supplier.Name := 'ООО "Ромашка"';
+    aItem.Supplier.Phone := '+74951234567';
+    aItem.Supplier.Inn := '7701234567';
+
+    // Stream to JSON
+    aJSON := aItem.ToJSON;
+    try
+      // Check existance of a supplier in JSON
+      AssertTrue('Item must contain "supplier"', Assigned(aJSON.Find('supplier')));
+
+      aSupplierJSON := aJSON.Objects['supplier'];
+      AssertEquals('Supplier name must match', 'ООО "Ромашка"', aSupplierJSON.Get('name', ''));
+      AssertEquals('Supplier phone must match', '+74951234567', aSupplierJSON.Get('phone', ''));
+      AssertEquals('Supplier INN must match', '7701234567', aSupplierJSON.Get('inn', ''));
+    finally
+      aJSON.Free;
+    end;
+  finally
+    aItem.Free;
   end;
 end;
 

@@ -151,7 +151,7 @@ begin
 
     aResp := TYookassaPaymentResponse.Create(aRaw);
     try
-      AssertEquals('pay_123', aResp.GetId);
+      AssertEquals('pay_123', aResp.ID);
       AssertEquals('pending', aResp.GetStatus);
       AssertEquals('https://yookassa.ru/checkout/pay/abc', aResp.ConfirmationURL);
       AssertEquals(100.00, aResp.Amount);
@@ -398,7 +398,7 @@ begin
 
     aResp := TYookassaReceiptResponse.Create(aRaw);
     try
-      AssertEquals('rcpt_456', aResp.GetId);
+      AssertEquals('rcpt_456', aResp.ID);
       AssertEquals('succeeded', aResp.GetStatus);
       AssertEquals('pay_789', aResp.PaymentId);
     finally

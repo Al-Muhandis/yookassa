@@ -25,14 +25,15 @@ type
     procedure SetUp; override;
     procedure TearDown; override;
   published
-    procedure TestCreatePayment_Sandbox;
+    procedure TestCreatePayment_Sandbox;            
+    procedure TestCreatePaymentAndThenRequestPaymentAfter_Sandbox;
     procedure TestCreatePaymentWithReceipt_Sandbox;
-    // Новые интеграционные тесты для чеков
     procedure TestCreateReceipt_Sandbox;
     procedure TestCreateReceiptWithPhone_Sandbox;
     procedure TestCreateReceiptWithTaxSystem_Sandbox;
     procedure TestCreateRefundReceipt_Sandbox;
     procedure TestCreateReceiptWithMarkCode_Sandbox;
+    procedure TestReceiptAfterPayment_Agent_Sandbox;
   end;
 
 implementation
@@ -139,7 +140,14 @@ begin
   AssertTrue('confirmation_url must be exists', Pos('http', FPaymentResp.ConfirmationURL) = 1);
 end;
 
-// Интеграционный тест с отправкой receipt
+procedure TTestYooKassaIntegration.TestCreatePaymentAndThenRequestPaymentAfter_Sandbox;
+begin
+  LoadPaymentConfig(FPaymentRequest);
+  FPaymentResp := FPaymentRequest.Execute as TYookassaPaymentResponse;
+  AssertTrue('confirmation_url must be exists', Pos('http', FPaymentResp.ConfirmationURL) = 1);
+end;
+
+// Integration test with receipt submission
 procedure TTestYooKassaIntegration.TestCreatePaymentWithReceipt_Sandbox;
 var
   aReceipt: TYookassaReceipt;
@@ -174,8 +182,8 @@ begin
 
   FReceiptResp := FReceiptRequest.Execute as TYookassaReceiptResponse;
 
-  AssertTrue('Receipt ID must be present', FReceiptResp.GetId <> '');
-  AssertTrue('Receipt ID should contain receipt prefix', Pos('receipt', FReceiptResp.GetId) > 0);
+  AssertTrue('Receipt ID must be present', FReceiptResp.ID <> '');
+  AssertTrue('Receipt ID should contain receipt prefix', Pos('receipt', FReceiptResp.ID) > 0);
   AssertTrue('PaymentId should be present', FReceiptResp.PaymentId <> '');
 end;
 
@@ -191,7 +199,7 @@ begin
 
   FReceiptResp := FReceiptRequest.Execute as TYookassaReceiptResponse;
 
-  AssertTrue('Receipt with phone must be created', FReceiptResp.GetId <> '');
+  AssertTrue('Receipt with phone must be created', FReceiptResp.ID <> '');
 end;
 
 procedure TTestYooKassaIntegration.TestCreateReceiptWithTaxSystem_Sandbox;
@@ -205,8 +213,8 @@ begin
 
   FReceiptResp := FReceiptRequest.Execute as TYookassaReceiptResponse;
 
-  AssertTrue('Receipt with tax system must be created', FReceiptResp.GetId <> '');
-  AssertTrue('Status should be present', Pos('status:', FReceiptResp.GetId) > 0);
+  AssertTrue('Receipt with tax system must be created', FReceiptResp.ID <> '');
+  AssertTrue('Status should be present', Pos('status:', FReceiptResp.ID) > 0);
 end;
 
 procedure TTestYooKassaIntegration.TestCreateRefundReceipt_Sandbox;
@@ -220,7 +228,7 @@ begin
   FPaymentResp := FPaymentRequest.Execute as TYookassaPaymentResponse;
 
   // Getting the payment_id from the response
-  aPaymentId := FPaymentResp.GetId;
+  aPaymentId := FPaymentResp.ID;
   AssertTrue('Payment ID must be present for refund test', aPaymentId <> '');
 
   // Create refund receipt now
@@ -231,7 +239,7 @@ begin
 
   FReceiptResp := FReceiptRequest.Execute as TYookassaReceiptResponse;
 
-  AssertTrue('Refund receipt must be created', FReceiptResp.GetId <> '');
+  AssertTrue('Refund receipt must be created', FReceiptResp.ID <> '');
   AssertEquals('refund', FReceiptResp.Raw.Get('type', ''));
 end;
 
@@ -243,7 +251,7 @@ begin
 
   FReceiptRequest.Receipt.CustomerEmail := 'markcode-test@example.com';
 
-  // Создаем маркированный товар
+  // Creating a labeled product
   aItem := TYookassaReceiptItem.Create;
   aItem.Description := 'Маркированный товар (тест)';
   aItem.Quantity := 1;
@@ -260,9 +268,77 @@ begin
 
   FReceiptResp := FReceiptRequest.Execute as TYookassaReceiptResponse;
 
-  AssertTrue('Receipt with mark code must be created', FReceiptResp.GetId <> '');
+  AssertTrue('Receipt with mark code must be created', FReceiptResp.ID <> '');
   // We check that the receipt contains information about labeling
   AssertTrue('Receipt should contain items', FReceiptResp.Raw.FindPath('receipt.items') <> nil);
+end;
+
+procedure TTestYooKassaIntegration.TestReceiptAfterPayment_Agent_Sandbox;
+var
+  aPayment: TYookassaPaymentRequest;
+  aReceiptReq: TYookassaReceiptRequest;
+  aItem: TYookassaReceiptItem;
+  aSupplier: TJSONObject;
+  aRawItem: TJSONData;
+  aPaymentID: String;
+begin
+  // Step 1: create payment
+  aPayment := TYookassaPaymentRequest.Create;
+  try
+    LoadPaymentConfig(aPayment);
+    FPaymentResp := aPayment.Execute as TYookassaPaymentResponse;
+    aPaymentID:=FPaymentResp.ID;
+    AssertTrue('Payment ID must be present', aPaymentID <> '');
+  finally
+    aPayment.Free;
+  end;
+
+  // Step 2: Create a receipt indicating the supplier (agent scheme)
+  aReceiptReq := TYookassaReceiptRequest.Create;
+  try
+    LoadReceiptConfig(aReceiptReq);
+    aReceiptReq.Receipt.CustomerEmail := 'agent-client@example.com';
+    aReceiptReq.PaymentId := aPaymentID; // required field
+    aReceiptReq.ReceiptType := 'payment';
+    aReceiptReq.Send := True;
+
+    // Adding a product with a supplier
+    aItem := TYookassaReceiptItem.Create;
+    try
+      aItem.Description := 'Товар от самозанятого';
+      aItem.Quantity := 1.0;
+      aItem.AmountValue := 500.00;
+      aItem.AmountCurrency := 'RUB';
+      aItem.VatCode := 1; // НДС 18%
+      aItem.PaymentMode := 'full_prepayment';
+      aItem.PaymentSubject := 'commodity';
+
+      // supplier
+      aItem.Supplier.Name := 'Иванов И.П.';
+      aItem.Supplier.Phone := '+79001234567';
+      aItem.Supplier.Inn := '123456789012';
+
+      aReceiptReq.Receipt.AddItem(aItem);
+
+      // send receipt
+      FReceiptResp := aReceiptReq.Execute as TYookassaReceiptResponse;
+
+      // check response
+      AssertTrue('Receipt must be created', FReceiptResp.ID <> '');
+      AssertEquals('succeeded', FReceiptResp.GetStatus);
+      AssertEquals(aPaymentId, FReceiptResp.PaymentId);
+
+      // check that supplier was sent
+      aRawItem := FReceiptResp.Raw.FindPath('receipt.items[0]');
+      AssertTrue('Supplier must be in receipt item', Assigned(aRawItem));
+      AssertTrue('Supplier must be present', Assigned(aRawItem.FindPath('supplier')));
+      AssertEquals('Иванов И.П.', (aRawItem as TJSONObject).Objects['supplier'].Get('name', ''));
+    finally
+      aItem.Free;
+    end;
+  finally
+    aReceiptReq.Free;
+  end;
 end;
 
 initialization

@@ -50,6 +50,11 @@
               </Win32>
             </Options>
           </Linking>
+          <Other>
+            <CompilerMessages>
+              <IgnoredMessages idx6058="True" idx3124="True" idx3123="True"/>
+            </CompilerMessages>
+          </Other>
         </CompilerOptions>
       </Item>
       <Item Name="Release">

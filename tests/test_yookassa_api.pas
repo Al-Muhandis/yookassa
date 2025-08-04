@@ -12,14 +12,14 @@ type
 
   { TYookassaPaymentTest }
 
-  TYookassaPaymentTest = class(TYookassaPaymentRequest)
+  TYookassaPaymentTest = class(TYookassaCreatePaymentRequest)
   public
     function BuildRequestJSONTest: String;
   end;
 
   { TYookassaReceiptRequestTest }
 
-  TYookassaReceiptRequestTest = class(TYookassaReceiptRequest)
+  TYookassaReceiptRequestTest = class(TYookassaCreateReceiptRequest)
   public
     function BuildRequestJSONTest: String;
   end;
@@ -92,7 +92,7 @@ end;
 
 procedure TTestYooKassa.CreatePaymentStaticHandler;
 begin
-  TYookassaPaymentRequest.CreatePayment('', '', 100, 'RUB', 'Test', 'https://return');
+  TYookassaCreatePaymentRequest.CreatePayment('', '', 100, 'RUB', 'Test', 'https://return');
 end;
 
 procedure TTestYooKassa.SetUp;

@@ -131,8 +131,8 @@ type
     property TaxSystemCode: Integer read FTaxSystemCode write FTaxSystemCode;
   end;
 
-  { TYookassaReceiptRequest }
-  TYookassaReceiptRequest = class(TYookassaRequest)
+  { TYookassaCreateReceiptRequest }
+  TYookassaCreateReceiptRequest = class(TYookassaRequest)
   private
     FReceiptType: string;
     FPaymentId: string;
@@ -159,8 +159,8 @@ type
       const aPaymentId: string = ''; aSend: Boolean = True): String;
   end;
 
- { TYookassaPaymentRequest }
-  TYookassaPaymentRequest = class(TYookassaRequest)
+ { TYookassaCreatePaymentRequest }
+  TYookassaCreatePaymentRequest = class(TYookassaRequest)
   private
     FAmount: Currency;
     FCurrency: string;
@@ -545,9 +545,9 @@ begin
   Result := ToJSON;
 end;
 
-{ TYookassaReceiptRequest }
+{ TYookassaCreateReceiptRequest }
 
-function TYookassaReceiptRequest.BuildRequestJSON: string;
+function TYookassaCreateReceiptRequest.BuildRequestJSON: string;
 var
   aJsonReq: TJSONObject;
 begin
@@ -592,43 +592,43 @@ begin
   end;
 end;
 
-function TYookassaReceiptRequest.CreateResponse(aRaw: TJSONObject): TYookassaResponse;
+function TYookassaCreateReceiptRequest.CreateResponse(aRaw: TJSONObject): TYookassaResponse;
 begin
   Result:=TYookassaReceiptResponse.Create(ARaw);
 end;
 
-function TYookassaReceiptRequest.GetEndpoint: string;
+function TYookassaCreateReceiptRequest.GetEndpoint: string;
 begin
   Result := FApiBaseUrl + '/receipts';
 end;
 
-constructor TYookassaReceiptRequest.Create;
+constructor TYookassaCreateReceiptRequest.Create;
 begin
   FSend := True; // by default, we send the receipt to the client
   FReceiptType := 'payment'; // by default, the payment receipt
 end;
 
-destructor TYookassaReceiptRequest.Destroy;
+destructor TYookassaCreateReceiptRequest.Destroy;
 begin
   FSettlements.Free;
   FReceipt.Free;
   inherited Destroy;
 end;
 
-function TYookassaReceiptRequest.GetReceipt: TYookassaReceipt;
+function TYookassaCreateReceiptRequest.GetReceipt: TYookassaReceipt;
 begin
   if not Assigned(FReceipt) then
     FReceipt:=TYookassaReceipt.Create;
   Result:=FReceipt;
 end;
 
-class function TYookassaReceiptRequest.CreateReceipt(const aShopId, aSecretKey: string; aReceipt: TYookassaReceipt;
+class function TYookassaCreateReceiptRequest.CreateReceipt(const aShopId, aSecretKey: string; aReceipt: TYookassaReceipt;
   const aReceiptType: string; const aPaymentId: string; aSend: Boolean): String;
 var
-  aReceiptReq: TYookassaReceiptRequest;
+  aReceiptReq: TYookassaCreateReceiptRequest;
   aResp: TYookassaReceiptResponse;
 begin
-  aReceiptReq := TYookassaReceiptRequest.Create;
+  aReceiptReq := TYookassaCreateReceiptRequest.Create;
   try
     aReceiptReq.FShopId := aShopId;
     aReceiptReq.FSecretKey := aSecretKey;
@@ -647,34 +647,34 @@ begin
   end;
 end;
 
-{ TYookassaPaymentRequest }
+{ TYookassaCreatePaymentRequest }
 
-function TYookassaPaymentRequest.BuildAmountJSON: TJSONObject;
+function TYookassaCreatePaymentRequest.BuildAmountJSON: TJSONObject;
 begin
   Result:= TJSONObject.Create;
   Result.Add('value', Format('%.2f', [FAmount], _FrmtStngsJSON));
   Result.Add('currency', FCurrency);
 end;
 
-function TYookassaPaymentRequest.BuildConfirmationJSON: TJSONObject;
+function TYookassaCreatePaymentRequest.BuildConfirmationJSON: TJSONObject;
 begin
   Result := TJSONObject.Create;
   Result.Add('type', 'redirect');
   Result.Add('return_url', FReturnUrl);
 end;
 
-function TYookassaPaymentRequest.BuildMetadataJSON: TJSONObject;
+function TYookassaCreatePaymentRequest.BuildMetadataJSON: TJSONObject;
 begin
   Result := TJSONObject.Create;
   Result.Add('order_id', FMetaOrderId);
 end;
 
-function TYookassaPaymentRequest.CreateResponse(aRaw: TJSONObject): TYookassaResponse;
+function TYookassaCreatePaymentRequest.CreateResponse(aRaw: TJSONObject): TYookassaResponse;
 begin
   Result := TYookassaPaymentResponse.Create(ARaw);
 end;
 
-function TYookassaPaymentRequest.BuildRequestJSON: string;
+function TYookassaCreatePaymentRequest.BuildRequestJSON: string;
 var
   aJsonReq: TJSONObject;
 begin
@@ -699,18 +699,18 @@ begin
   end;
 end;
 
-function TYookassaPaymentRequest.GetEndpoint: string;
+function TYookassaCreatePaymentRequest.GetEndpoint: string;
 begin
   Result := FApiBaseUrl + '/payments';
 end;
 
-class function TYookassaPaymentRequest.CreatePayment(const aShopId, aSecretKey: string;
+class function TYookassaCreatePaymentRequest.CreatePayment(const aShopId, aSecretKey: string;
   aAmount: Currency; const aCurrency, aDescription, aReturnUrl: string): string;
 var
-  aPayment: TYookassaPaymentRequest;
+  aPayment: TYookassaCreatePaymentRequest;
   aResp: TYookassaPaymentResponse;
 begin
-  aPayment := TYookassaPaymentRequest.Create;
+  aPayment := TYookassaCreatePaymentRequest.Create;
   try
     aPayment.ShopId := aShopId;
     aPayment.SecretKey := aSecretKey;
@@ -729,7 +729,7 @@ begin
   end;
 end;
 
-destructor TYookassaPaymentRequest.Destroy;
+destructor TYookassaCreatePaymentRequest.Destroy;
 begin
   FReceipt.Free;
   inherited Destroy;

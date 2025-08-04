@@ -16,10 +16,10 @@ type
   private
     FPaymentResp: TYookassaPaymentResponse;
     FReceiptResp: TYookassaReceiptResponse;
-    FPaymentRequest: TYookassaPaymentRequest;
-    FReceiptRequest: TYookassaReceiptRequest;
-    class procedure LoadPaymentConfig(aPaymentRequest: TYookassaPaymentRequest);
-    class procedure LoadReceiptConfig(aReceiptRequest: TYookassaReceiptRequest);
+    FPaymentRequest: TYookassaCreatePaymentRequest;
+    FReceiptRequest: TYookassaCreateReceiptRequest;
+    class procedure LoadPaymentConfig(aPaymentRequest: TYookassaCreatePaymentRequest);
+    class procedure LoadReceiptConfig(aReceiptRequest: TYookassaCreateReceiptRequest);
     procedure UpdateTestReceipt(TestReceipt: TYookassaReceipt; aAmount: Currency; const aCurrency: string);
   protected
     procedure SetUp; override;
@@ -42,7 +42,7 @@ uses
   IniFiles
   ;
 
-class procedure TTestYooKassaIntegration.LoadPaymentConfig(aPaymentRequest: TYookassaPaymentRequest);
+class procedure TTestYooKassaIntegration.LoadPaymentConfig(aPaymentRequest: TYookassaCreatePaymentRequest);
 var
   aIni: TIniFile;
 begin
@@ -59,7 +59,7 @@ begin
   end;
 end;
 
-class procedure TTestYooKassaIntegration.LoadReceiptConfig(aReceiptRequest: TYookassaReceiptRequest);
+class procedure TTestYooKassaIntegration.LoadReceiptConfig(aReceiptRequest: TYookassaCreateReceiptRequest);
 var
   aIni: TIniFile;
 begin
@@ -94,8 +94,8 @@ end;
 procedure TTestYooKassaIntegration.SetUp;
 begin
   inherited SetUp;
-  FPaymentRequest := TYookassaPaymentRequest.Create;
-  FReceiptRequest := TYookassaReceiptRequest.Create;
+  FPaymentRequest := TYookassaCreatePaymentRequest.Create;
+  FReceiptRequest := TYookassaCreateReceiptRequest.Create;
   FPaymentResp := nil;
   FReceiptResp := nil;
 end;
@@ -275,15 +275,14 @@ end;
 
 procedure TTestYooKassaIntegration.TestReceiptAfterPayment_Agent_Sandbox;
 var
-  aPayment: TYookassaPaymentRequest;
-  aReceiptReq: TYookassaReceiptRequest;
+  aPayment: TYookassaCreatePaymentRequest;
+  aReceiptReq: TYookassaCreateReceiptRequest;
   aItem: TYookassaReceiptItem;
-  aSupplier: TJSONObject;
   aRawItem: TJSONData;
   aPaymentID: String;
 begin
   // Step 1: create payment
-  aPayment := TYookassaPaymentRequest.Create;
+  aPayment := TYookassaCreatePaymentRequest.Create;
   try
     LoadPaymentConfig(aPayment);
     FPaymentResp := aPayment.Execute as TYookassaPaymentResponse;
@@ -294,7 +293,7 @@ begin
   end;
 
   // Step 2: Create a receipt indicating the supplier (agent scheme)
-  aReceiptReq := TYookassaReceiptRequest.Create;
+  aReceiptReq := TYookassaCreateReceiptRequest.Create;
   try
     LoadReceiptConfig(aReceiptReq);
     aReceiptReq.Receipt.CustomerEmail := 'agent-client@example.com';

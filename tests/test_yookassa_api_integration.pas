@@ -17,9 +17,10 @@ type
     FPaymentResp: TYookassaPaymentResponse;
     FReceiptResp: TYookassaReceiptResponse;
     FPaymentRequest: TYookassaCreatePaymentRequest;
-    FReceiptRequest: TYookassaCreateReceiptRequest;
-    class procedure LoadPaymentConfig(aPaymentRequest: TYookassaCreatePaymentRequest);
-    class procedure LoadReceiptConfig(aReceiptRequest: TYookassaCreateReceiptRequest);
+    FReceiptRequest: TYookassaCreateReceiptRequest;                                     
+    class procedure LoadRequestConf(aPaymentRequest: TYookassaRequest);
+    class procedure LoadCreatePaymentConf(aPaymentRequest: TYookassaCreatePaymentRequest);
+    class procedure LoadCreateReceiptConf(aReceiptRequest: TYookassaCreateReceiptRequest);
     procedure UpdateTestReceipt(TestReceipt: TYookassaReceipt; aAmount: Currency; const aCurrency: string);
   protected
     procedure SetUp; override;
@@ -42,7 +43,7 @@ uses
   IniFiles
   ;
 
-class procedure TTestYooKassaIntegration.LoadPaymentConfig(aPaymentRequest: TYookassaCreatePaymentRequest);
+class procedure TTestYooKassaIntegration.LoadRequestConf(aPaymentRequest: TYookassaRequest);
 var
   aIni: TIniFile;
 begin
@@ -50,6 +51,18 @@ begin
   try
     aPaymentRequest.ShopId     := aIni.ReadString('shop', 'ShopId', '');
     aPaymentRequest.SecretKey  := aIni.ReadString('shop', 'SecretKey', '');
+  finally
+    aIni.Free;
+  end;
+end;
+
+class procedure TTestYooKassaIntegration.LoadCreatePaymentConf(aPaymentRequest: TYookassaCreatePaymentRequest);
+var
+  aIni: TIniFile;
+begin
+  aIni := TIniFile.Create(ExtractFilePath(ParamStr(0)) + 'config.ini');
+  try
+    LoadRequestConf(aPaymentRequest);
     aPaymentRequest.Amount     := aIni.ReadFloat ('order', 'Amount', 10.00);
     aPaymentRequest.Currency   := aIni.ReadString('order', 'Currency', 'RUB');
     aPaymentRequest.Description:= aIni.ReadString('order', 'Description', 'Тест с чеком');
@@ -59,14 +72,13 @@ begin
   end;
 end;
 
-class procedure TTestYooKassaIntegration.LoadReceiptConfig(aReceiptRequest: TYookassaCreateReceiptRequest);
+class procedure TTestYooKassaIntegration.LoadCreateReceiptConf(aReceiptRequest: TYookassaCreateReceiptRequest);
 var
   aIni: TIniFile;
 begin
   aIni := TIniFile.Create(ExtractFilePath(ParamStr(0)) + 'config.ini');
   try
-    aReceiptRequest.ShopId    := aIni.ReadString('shop', 'ShopId', '');
-    aReceiptRequest.SecretKey := aIni.ReadString('shop', 'SecretKey', '');
+    LoadRequestConf(aReceiptRequest);
     aReceiptRequest.Send      := aIni.ReadBool('receipt', 'Send', True);
   finally
     aIni.Free;
@@ -135,16 +147,32 @@ end;
 
 procedure TTestYooKassaIntegration.TestCreatePayment_Sandbox;
 begin
-  LoadPaymentConfig(FPaymentRequest);
+  LoadCreatePaymentConf(FPaymentRequest);
   FPaymentResp := FPaymentRequest.Execute as TYookassaPaymentResponse;
   AssertTrue('confirmation_url must be exists', Pos('http', FPaymentResp.ConfirmationURL) = 1);
 end;
 
 procedure TTestYooKassaIntegration.TestCreatePaymentAndThenRequestPaymentAfter_Sandbox;
+var
+  aGetPaymentReq: TYookassaGetPaymentRequest;
+  aPayment: TYookassaPaymentResponse;
 begin
-  LoadPaymentConfig(FPaymentRequest);
-  FPaymentResp := FPaymentRequest.Execute as TYookassaPaymentResponse;
-  AssertTrue('confirmation_url must be exists', Pos('http', FPaymentResp.ConfirmationURL) = 1);
+  LoadCreatePaymentConf(FPaymentRequest);
+  aPayment := FPaymentRequest.Execute as TYookassaPaymentResponse;
+  try
+    AssertTrue('confirmation_url must be exists', Pos('http', aPayment.ConfirmationURL) = 1);
+    aGetPaymentReq:=TYookassaGetPaymentRequest.Create;
+    try
+      LoadRequestConf(aGetPaymentReq);
+      aGetPaymentReq.PaymentId:=aPayment.ID;
+      FPaymentResp:=aGetPaymentReq.Execute as TYookassaPaymentResponse;
+      AssertFalse('id must be exists', FPaymentResp.ID.IsEmpty);
+    finally
+      aGetPaymentReq.Free;
+    end;
+  finally
+    aPayment.Free;
+  end;
 end;
 
 // Integration test with receipt submission
@@ -153,7 +181,7 @@ var
   aReceipt: TYookassaReceipt;
   aItem: TYookassaReceiptItem;
 begin
-  LoadPaymentConfig(FPaymentRequest);
+  LoadCreatePaymentConf(FPaymentRequest);
   aReceipt := TYookassaReceipt.Create;
   aReceipt.CustomerEmail := 'user@example.com';
 
@@ -175,7 +203,7 @@ end;
 
 procedure TTestYooKassaIntegration.TestCreateReceipt_Sandbox;
 begin
-  LoadReceiptConfig(FReceiptRequest);
+  LoadCreateReceiptConf(FReceiptRequest);
 
   UpdateTestReceipt(FReceiptRequest.Receipt, 50.00, 'RUB');
   FReceiptRequest.ReceiptType := 'payment';
@@ -189,7 +217,7 @@ end;
 
 procedure TTestYooKassaIntegration.TestCreateReceiptWithPhone_Sandbox;
 begin
-  LoadReceiptConfig(FReceiptRequest);
+  LoadCreateReceiptConf(FReceiptRequest);
 
   UpdateTestReceipt(FReceiptRequest.Receipt, 75.50, 'RUB');
   FReceiptRequest.Receipt.CustomerPhone := '+79001234567';
@@ -204,7 +232,7 @@ end;
 
 procedure TTestYooKassaIntegration.TestCreateReceiptWithTaxSystem_Sandbox;
 begin
-  LoadReceiptConfig(FReceiptRequest);
+  LoadCreateReceiptConf(FReceiptRequest);
 
   UpdateTestReceipt(FReceiptRequest.Receipt, 120.00, 'RUB');
   FReceiptRequest.Receipt.TaxSystemCode := 1; // УСН income
@@ -222,7 +250,7 @@ var
   aPaymentId: String;
 begin
   // First, we create a payment to receive the payment_id
-  LoadPaymentConfig(FPaymentRequest);
+  LoadCreatePaymentConf(FPaymentRequest);
 
   UpdateTestReceipt(FReceiptRequest.Receipt, 30.00, 'RUB');
   FPaymentResp := FPaymentRequest.Execute as TYookassaPaymentResponse;
@@ -232,7 +260,7 @@ begin
   AssertTrue('Payment ID must be present for refund test', aPaymentId <> '');
 
   // Create refund receipt now
-  LoadReceiptConfig(FReceiptRequest);
+  LoadCreateReceiptConf(FReceiptRequest);
   FReceiptRequest.ReceiptType := 'refund';
   FReceiptRequest.PaymentId := aPaymentId;
   FReceiptRequest.Send := False; // Do not send refund receipt to client
@@ -247,7 +275,7 @@ procedure TTestYooKassaIntegration.TestCreateReceiptWithMarkCode_Sandbox;
 var
   aItem: TYookassaReceiptItem;
 begin
-  LoadReceiptConfig(FReceiptRequest);
+  LoadCreateReceiptConf(FReceiptRequest);
 
   FReceiptRequest.Receipt.CustomerEmail := 'markcode-test@example.com';
 
@@ -284,7 +312,7 @@ begin
   // Step 1: create payment
   aPayment := TYookassaCreatePaymentRequest.Create;
   try
-    LoadPaymentConfig(aPayment);
+    LoadCreatePaymentConf(aPayment);
     FPaymentResp := aPayment.Execute as TYookassaPaymentResponse;
     aPaymentID:=FPaymentResp.ID;
     AssertTrue('Payment ID must be present', aPaymentID <> '');
@@ -295,7 +323,7 @@ begin
   // Step 2: Create a receipt indicating the supplier (agent scheme)
   aReceiptReq := TYookassaCreateReceiptRequest.Create;
   try
-    LoadReceiptConfig(aReceiptReq);
+    LoadCreateReceiptConf(aReceiptReq);
     aReceiptReq.Receipt.CustomerEmail := 'agent-client@example.com';
     aReceiptReq.PaymentId := aPaymentID; // required field
     aReceiptReq.ReceiptType := 'payment';

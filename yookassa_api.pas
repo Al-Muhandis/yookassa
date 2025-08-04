@@ -14,35 +14,37 @@ type
   { TYookassaResponse }
   TYookassaResponse = class
   private
-    FRaw: TJSONObject;
+    FRaw: TJSONObject;                  
+    function GetId: string; virtual; abstract;
+    function GetStatus: string; virtual; abstract;
   public
     constructor Create(ARaw: TJSONObject);
     destructor Destroy; override;
     property Raw: TJSONObject read FRaw;
-    function GetId: string; virtual; abstract;
-    function GetStatus: string; virtual; abstract;
   end;
 
   { TYookassaPaymentResponse }
   TYookassaPaymentResponse = class(TYookassaResponse) 
   private
     function GetConfirmationURL: string;
-    function GetAmount: Currency;
-  public
+    function GetAmount: Currency;   
     function GetId: string; override;
+  public
     function GetStatus: string; override;
     property ConfirmationURL: string read GetConfirmationURL;
     property Amount: Currency read GetAmount;
+    property ID: String read GetId;
   end;
 
   { TYookassaReceiptResponse }
   TYookassaReceiptResponse = class(TYookassaResponse)
   private
-    function GetPaymentId: String;
-  public
+    function GetPaymentId: String;   
     function GetId: string; override;
+  public
     function GetStatus: string; override;
     property PaymentId: string read GetPaymentId;
+    property ID: String read GetId;
   end;
 
   { Base class for request at YooKassa API }
@@ -72,8 +74,25 @@ type
     function Execute: TYookassaResponse;
   end;
 
+  { TYookassaSupplier }
+  TYookassaSupplier = class
+  private
+    FName: string;
+    FPhone: string;
+    FInn: string;
+  public
+    constructor Create(const AName, APhone, AInn: string); overload;
+    function ToJSON: TJSONObject;
+    property Name: string read FName write FName;
+    property Phone: string read FPhone write FPhone;
+    property Inn: string read FInn write FInn;
+  end;
+
   { TYookassaReceiptItem }
   TYookassaReceiptItem = class
+  private
+    FSupplier: TYookassaSupplier;
+    function GetSupplier: TYookassaSupplier;
   public
     Description: string;
     Quantity: Double;
@@ -86,7 +105,9 @@ type
     MarkCodeInfo: string; // base64 gs_1m,
     Measure: string;
     constructor Create;
+    destructor Destroy; override;
     function ToJSON: TJSONObject;
+    property Supplier: TYookassaSupplier read GetSupplier;
   end;
 
   TReceiptItems = specialize TFPGObjectList<TYookassaReceiptItem>;
@@ -376,11 +397,42 @@ begin
   end;
 end;
 
+{ TYookassaSupplier }
+
+constructor TYookassaSupplier.Create(const AName, APhone, AInn: string);
+begin
+  Create;
+  FName := AName;
+  FPhone := APhone;
+  FInn := AInn;
+end;
+
+function TYookassaSupplier.ToJSON: TJSONObject;
+begin
+  Result := TJSONObject.Create;
+  if FName <> '' then Result.Add('name', FName);
+  if FPhone <> '' then Result.Add('phone', FPhone);
+  if FInn <> '' then Result.Add('inn', FInn);
+end;
+
 { TYookassaReceiptItem }
+
+function TYookassaReceiptItem.GetSupplier: TYookassaSupplier;
+begin
+  if not Assigned(FSupplier) then
+    FSupplier := TYookassaSupplier.Create;
+  Result := FSupplier;
+end;
 
 constructor TYookassaReceiptItem.Create;
 begin
   MarkMode := -1; // -1 = not specified
+end;
+
+destructor TYookassaReceiptItem.Destroy;
+begin
+  FSupplier.Free;
+  inherited Destroy;
 end;
 
 function TYookassaReceiptItem.ToJSON: TJSONObject;
@@ -429,6 +481,10 @@ begin
 
     if Measure <> '' then
       Result.Add('measure', Measure);
+
+    if Assigned(FSupplier) then
+      Result.Add('supplier', FSupplier.ToJSON);
+
   except
     FreeAndNil(Result);
     raise;

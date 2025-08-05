@@ -8,7 +8,7 @@ unit yookassa_rt;
 interface
 
 uses
-  yookassa_api;
+  yookassa_api, yookassa_webhook;
 
 implementation
 

@@ -19,6 +19,10 @@
         <Filename Value="yookassa_api.pas"/>
         <UnitName Value="yookassa_api"/>
       </Item>
+      <Item>
+        <Filename Value="yookassa_webhook.pas"/>
+        <UnitName Value="yookassa_webhook"/>
+      </Item>
     </Files>
     <RequiredPkgs>
       <Item>

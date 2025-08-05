@@ -132,6 +132,23 @@ type
     property TaxSystemCode: Integer read FTaxSystemCode write FTaxSystemCode;
   end;
 
+  { TYookassaSettlement }
+  TYookassaSettlement = class
+  private
+    FType: string;     // 'cash' or 'bank_card'
+    FAmountValue: Currency;
+    FAmountCurrency: string;
+  public
+    constructor Create; overload;
+    constructor Create(const aType: string; aAmount: Currency; const aCurrency: string); overload;
+    function ToJSON: TJSONObject;
+    property SettlementType: string read FType write FType;
+    property Amount: Currency read FAmountValue write FAmountValue;
+    property Currency: string read FAmountCurrency write FAmountCurrency;
+  end;
+
+  TSettlementsList = specialize TFPGObjectList<TYookassaSettlement>;
+
   { TYookassaCreateReceiptRequest }
   TYookassaCreateReceiptRequest = class(TYookassaRequest)
   private
@@ -140,8 +157,9 @@ type
     FRefundId: string;
     FReceipt: TYookassaReceipt;
     FSend: Boolean;
-    FSettlements: TJSONArray;
+    FSettlements: TSettlementsList;
     function GetReceipt: TYookassaReceipt;
+    function GetSettlements: TSettlementsList;
   protected
     function BuildRequestJSON: string; override;
     function CreateResponse(aRaw: TJSONObject): TYookassaResponse; override;
@@ -155,7 +173,7 @@ type
     property RefundId: string read FRefundId write FRefundId;
     property Receipt: TYookassaReceipt read GetReceipt write FReceipt;
     property Send: Boolean read FSend write FSend;
-    property Settlements: TJSONArray read FSettlements write FSettlements;
+    property Settlements: TSettlementsList read GetSettlements;
     class function CreateReceipt(const aShopId, aSecretKey: string; aReceipt: TYookassaReceipt;
       const aReceiptType: string; const aPaymentId: string; aSend: Boolean): TYookassaReceiptResponse;
   end;
@@ -556,11 +574,43 @@ begin
   Result := ToJSON;
 end;
 
+{ TYookassaSettlement }
+
+constructor TYookassaSettlement.Create;
+begin
+  FAmountCurrency := 'RUB';
+end;
+
+constructor TYookassaSettlement.Create(const aType: string; aAmount: Currency; const aCurrency: string);
+begin
+  Create;
+  FType := aType;
+  FAmountValue := aAmount;
+  FAmountCurrency := aCurrency;
+end;
+
+function TYookassaSettlement.ToJSON: TJSONObject;
+var
+  aAmount: TJSONObject;
+begin
+  Result := TJSONObject.Create;
+
+  if FType <> '' then
+    Result.Add('type', FType);
+
+  aAmount := TJSONObject.Create;
+  aAmount.Add('value', Format('%.2f', [FAmountValue], _FrmtStngsJSON));
+  aAmount.Add('currency', FAmountCurrency);
+  Result.Add('amount', aAmount);
+end;
+
 { TYookassaCreateReceiptRequest }
 
 function TYookassaCreateReceiptRequest.BuildRequestJSON: string;
 var
   aJsonReq: TJSONObject;
+  aSettlementsArray: TJSONArray;
+  aSettlement: TYookassaSettlement;
 begin
   EYooKassaValidationError.RaiseIfNil(FReceipt, 'Receipt');
   EYooKassaValidationError.RaiseIfFalse(FReceipt.Items.Count > 0, 'Receipt must have at least one item');
@@ -589,9 +639,14 @@ begin
         aJsonReq.Add('refund_id', FRefundId);
     end;
 
-    // settlements for splitting payments (if used)
+    // A list of settlings or payments
     if Assigned(FSettlements) and (FSettlements.Count > 0) then
-      aJsonReq.Add('settlements', FSettlements);
+    begin
+      aSettlementsArray := TJSONArray.Create;
+      for aSettlement in FSettlements do
+        aSettlementsArray.Add(aSettlement.ToJSON);
+      aJsonReq.Add('settlements', aSettlementsArray);
+    end;
 
     Result := aJsonReq.AsJSON;
   finally
@@ -633,6 +688,13 @@ begin
   if not Assigned(FReceipt) then
     FReceipt:=TYookassaReceipt.Create;
   Result:=FReceipt;
+end;
+
+function TYookassaCreateReceiptRequest.GetSettlements: TSettlementsList;
+begin
+  if not Assigned(FSettlements) then
+    FSettlements := TSettlementsList.Create(True); // Auto-free
+  Result := FSettlements;
 end;
 
 class function TYookassaCreateReceiptRequest.CreateReceipt(const aShopId, aSecretKey: string;

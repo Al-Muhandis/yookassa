@@ -28,12 +28,13 @@ type
   private
     function GetConfirmationURL: string;
     function GetAmount: Currency;   
-    function GetId: string; override;
-  public
+    function GetId: string; override; 
     function GetStatus: string; override;
+  public
     property ConfirmationURL: string read GetConfirmationURL;
     property Amount: Currency read GetAmount;
     property ID: String read GetId;
+    property Status: String read GetStatus;
   end;
 
   { TYookassaReceiptResponse }
@@ -565,12 +566,8 @@ begin
   EYooKassaValidationError.RaiseIfFalse(FReceipt.Items.Count > 0, 'Receipt must have at least one item');
 
   if FReceiptType = 'refund' then
-  begin
-    EYooKassaValidationError.RaiseIfFalse(
-      (FPaymentId <> '') or (FRefundId <> ''),
-      'For refund receipt, either PaymentId or RefundId must be specified'
-    );
-  end;
+    EYooKassaValidationError.RaiseIfFalse((FPaymentId <> '') or (FRefundId <> ''),
+      'For refund receipt, either PaymentId or RefundId must be specified');
 
   aJsonReq := TJSONObject.Create;
   try
@@ -619,6 +616,7 @@ end;
 
 constructor TYookassaCreateReceiptRequest.Create;
 begin
+  inherited Create;
   FSend := True; // by default, we send the receipt to the client
   FReceiptType := 'payment'; // by default, the payment receipt
 end;

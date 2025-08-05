@@ -62,7 +62,7 @@ type
     function BuildRequestJSON: string; virtual; abstract;
     function CreateResponse(aRaw: TJSONObject): TYookassaResponse; virtual; abstract;
     function GetEndpoint: string; virtual; abstract;
-    function GetMethod: string; virtual;
+    function GetMethod: string; virtual; abstract;
     function DoExecute: String; virtual;
     procedure Log(aEvent: TEventType; const Msg: string);
   public
@@ -145,6 +145,7 @@ type
     function BuildRequestJSON: string; override;
     function CreateResponse(aRaw: TJSONObject): TYookassaResponse; override;
     function GetEndpoint: string; override;
+    function GetMethod: string; override;
   public
     constructor Create; override;
     destructor Destroy; override;
@@ -174,6 +175,7 @@ type
     function BuildRequestJSON: string; override;  
     function CreateResponse(aRaw: TJSONObject): TYookassaResponse; override;
     function GetEndpoint: string; override;
+    function GetMethod: string; override;
   public
     destructor Destroy; override;
     property Amount: Currency read FAmount write FAmount;
@@ -324,11 +326,6 @@ procedure TYookassaRequest.Log(aEvent: TEventType; const Msg: string);
 begin
   if Assigned(FOnLog) then
     FOnLog(aEvent, Msg);
-end;
-
-function TYookassaRequest.GetMethod: string;
-begin
-  Result := 'POST';
 end;
 
 function TYookassaRequest.DoExecute: String;
@@ -615,6 +612,11 @@ begin
   Result := FApiBaseUrl + '/receipts';
 end;
 
+function TYookassaCreateReceiptRequest.GetMethod: string;
+begin
+  Result:='POST';
+end;
+
 constructor TYookassaCreateReceiptRequest.Create;
 begin
   FSend := True; // by default, we send the receipt to the client
@@ -711,6 +713,11 @@ end;
 function TYookassaCreatePaymentRequest.GetEndpoint: string;
 begin
   Result := FApiBaseUrl + '/payments';
+end;
+
+function TYookassaCreatePaymentRequest.GetMethod: string;
+begin
+  Result:='POST';
 end;
 
 class function TYookassaCreatePaymentRequest.CreatePayment(const aShopId, aSecretKey: string; aAmount: Currency;

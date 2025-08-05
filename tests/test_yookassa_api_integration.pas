@@ -26,8 +26,9 @@ type
     procedure SetUp; override;
     procedure TearDown; override;
   published
-    procedure TestCreatePayment_Sandbox;            
-    procedure TestCreatePaymentAndThenRequestPaymentAfter_Sandbox;
+    procedure TestCreatePayment;
+    procedure TestCreatePaymentAndThenRequestPaymentAfter;
+    procedure TestCreatePaymentThenCreateReceiptAfterSuccessPay;
     procedure TestCreatePaymentWithReceipt_Sandbox;
     procedure TestCreateReceipt_Sandbox;
     procedure TestCreateReceiptWithPhone_Sandbox;
@@ -42,6 +43,19 @@ implementation
 uses
   IniFiles
   ;
+
+procedure JSONToFile(const aFileName: String; aJSON: TJSONObject);
+var
+  aFile: TStringList;
+begin
+  aFile := TStringList.Create;
+  try
+    aFile.Text := aJSON.FormatJSON();
+    aFile.SaveToFile(aFileName);
+  finally
+    aFile.Free;
+  end;
+end;
 
 class procedure TTestYooKassaIntegration.LoadRequestConf(aPaymentRequest: TYookassaRequest);
 var
@@ -99,7 +113,7 @@ begin
   aItem.AmountCurrency := aCurrency;
   aItem.VatCode := 1; // НДС 18%
   aItem.PaymentMode := 'full_prepayment';
-  aItem.PaymentSubject := 'commodity';
+  aItem.PaymentSubject := 'service';
   TestReceipt.AddItem(aItem);
 end;
 
@@ -113,30 +127,11 @@ begin
 end;
 
 procedure TTestYooKassaIntegration.TearDown;
-var
-  aFile: TStringList;
 begin
   if Assigned(FPaymentResp) then
-  begin
-    aFile := TStringList.Create;
-    try
-      aFile.Text := FPaymentResp.Raw.FormatJSON();
-      aFile.SaveToFile('~payment_response.json');
-    finally
-      aFile.Free;
-    end;
-  end;
-
+    JSONToFile('~payment_response.json', FPaymentResp.Raw);
   if Assigned(FReceiptResp) then
-  begin
-    aFile := TStringList.Create;
-    try
-      aFile.Text := FReceiptResp.Raw.FormatJSON();
-      aFile.SaveToFile('~receipt_response.json');
-    finally
-      aFile.Free;
-    end;
-  end;
+    JSONToFile('~receipt_response.json', FReceiptResp.Raw);
 
   FPaymentResp.Free;
   FReceiptResp.Free;
@@ -145,14 +140,14 @@ begin
   inherited TearDown;
 end;
 
-procedure TTestYooKassaIntegration.TestCreatePayment_Sandbox;
+procedure TTestYooKassaIntegration.TestCreatePayment;
 begin
   LoadCreatePaymentConf(FPaymentRequest);
   FPaymentResp := FPaymentRequest.Execute as TYookassaPaymentResponse;
   AssertTrue('confirmation_url must be exists', Pos('http', FPaymentResp.ConfirmationURL) = 1);
 end;
 
-procedure TTestYooKassaIntegration.TestCreatePaymentAndThenRequestPaymentAfter_Sandbox;
+procedure TTestYooKassaIntegration.TestCreatePaymentAndThenRequestPaymentAfter;
 var
   aGetPaymentReq: TYookassaGetPaymentRequest;
   aPayment: TYookassaPaymentResponse;
@@ -173,6 +168,39 @@ begin
   finally
     aPayment.Free;
   end;
+end;
+
+procedure TTestYooKassaIntegration.TestCreatePaymentThenCreateReceiptAfterSuccessPay;
+var
+  aConfirmationURL, aPaymentID: String;
+  aPaymentResp: TYookassaPaymentResponse;
+  aSucceeded: Boolean;
+begin
+  LoadCreatePaymentConf(FPaymentRequest);
+  FPaymentResp:=FPaymentRequest.Execute as TYookassaPaymentResponse;
+  aPaymentID:=FPaymentResp.ID;
+  AssertNotNull('PaymentId must be exists', aPaymentID);
+  aConfirmationURL:=FPaymentResp.ConfirmationURL;
+  AssertNotNull('Confirmation URL must be exists', aConfirmationURL);
+//  OpenURL(aConfirmationURL); Depends from LCLIntf unit
+{ Just pay using the link aConfirmationURL (you can view it in the file "~payment_response.json")
+    within a minute (while the program is on Sleep(60*1000)) }
+  JSONToFile('~payment_response.json', FPaymentResp.Raw);
+  aSucceeded:=False;
+  repeat
+    Sleep(10*1000); // 10 seconds
+    aPaymentResp:=TYookassaGetPaymentRequest.GetPayment(FPaymentRequest.ShopId, FPaymentRequest.SecretKey, aPaymentID);
+    try
+      aSucceeded:=aPaymentResp.Status='succeeded';
+    finally
+      aPaymentResp.Free;
+    end;
+  until aSucceeded;
+  LoadCreateReceiptConf(FReceiptRequest);
+  UpdateTestReceipt(FReceiptRequest.Receipt, FPaymentRequest.Amount, FPaymentRequest.Currency);
+  FReceiptRequest.PaymentId:=aPaymentID;
+  FReceiptResp:=FReceiptRequest.Execute as TYookassaReceiptResponse; 
+  AssertNotNull('ReceipId must be exists', FReceiptResp.ID);
 end;
 
 // Integration test with receipt submission
@@ -204,7 +232,6 @@ end;
 procedure TTestYooKassaIntegration.TestCreateReceipt_Sandbox;
 begin
   LoadCreateReceiptConf(FReceiptRequest);
-
   UpdateTestReceipt(FReceiptRequest.Receipt, 50.00, 'RUB');
   FReceiptRequest.ReceiptType := 'payment';
 
@@ -218,7 +245,6 @@ end;
 procedure TTestYooKassaIntegration.TestCreateReceiptWithPhone_Sandbox;
 begin
   LoadCreateReceiptConf(FReceiptRequest);
-
   UpdateTestReceipt(FReceiptRequest.Receipt, 75.50, 'RUB');
   FReceiptRequest.Receipt.CustomerPhone := '+79001234567';
 
@@ -233,7 +259,6 @@ end;
 procedure TTestYooKassaIntegration.TestCreateReceiptWithTaxSystem_Sandbox;
 begin
   LoadCreateReceiptConf(FReceiptRequest);
-
   UpdateTestReceipt(FReceiptRequest.Receipt, 120.00, 'RUB');
   FReceiptRequest.Receipt.TaxSystemCode := 1; // УСН income
 
@@ -251,7 +276,6 @@ var
 begin
   // First, we create a payment to receive the payment_id
   LoadCreatePaymentConf(FPaymentRequest);
-
   UpdateTestReceipt(FReceiptRequest.Receipt, 30.00, 'RUB');
   FPaymentResp := FPaymentRequest.Execute as TYookassaPaymentResponse;
 

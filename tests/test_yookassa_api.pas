@@ -432,7 +432,6 @@ begin
   try
     AssertEquals('payment', aParsedJSON.Strings['type']);
     AssertEquals(True, aParsedJSON.Booleans['send']);
-    AssertTrue(aParsedJSON.Find('receipt') <> nil);
   finally
     aParsedJSON.Free;
   end;
@@ -455,7 +454,6 @@ begin
     AssertEquals('refund', aParsedJSON.Strings['type']);
     AssertEquals(False, aParsedJSON.Booleans['send']);
     AssertEquals('payment_123456', aParsedJSON.Strings['payment_id']);
-    AssertTrue(aParsedJSON.Find('receipt') <> nil);
   finally
     aParsedJSON.Free;
   end;

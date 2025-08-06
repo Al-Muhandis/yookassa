@@ -124,8 +124,8 @@ type
     constructor Create;
     destructor Destroy; override;
     procedure AddItem(aItem: TYookassaReceiptItem);
-    function ToJSON: TJSONObject;
-    function ToReceiptJSON: TJSONObject; // to create a receipt separately
+    function ToJSON: TJSONObject;            // to create a receipt separately
+    procedure AppendJSON(aJSON: TJSONObject);
     property CustomerEmail: String read FCustomerEmail write FCustomerEmail;
     property CustomerPhone: String read FCustomerPhone write FCustomerPhone;
     property Items: TReceiptItems read FItems write FItems;
@@ -370,7 +370,8 @@ begin
       aIdempotenceKey:=GenerateIdempotenceKey;
       aHttp.AddHeader('Idempotence-Key', aIdempotenceKey);
 
-      Log(etDebug, Format('YooKassa Request (%s): %s. Idempotence-Key: %s', [GetEndpoint, aReqJSON, aIdempotenceKey]));
+      Log(etDebug, Format('Request (Idempotence-Key - %s) (%s %s):%s%s',
+        [aIdempotenceKey, GetMethod, GetEndpoint, LineEnding, aReqJSON]));
 
       aReqStream := TStringStream.Create(aReqJSON);
       try
@@ -540,14 +541,17 @@ begin
 end;
 
 function TYookassaReceipt.ToJSON: TJSONObject;
+begin
+  Result := TJSONObject.Create;
+  AppendJSON(Result);
+end;
+
+procedure TYookassaReceipt.AppendJSON(aJSON: TJSONObject);
 var
-  aJson: TJSONObject;
   aItems: TJSONArray;
   aCustomer: TJSONObject;
   Item: TYookassaReceiptItem;
 begin
-  aJson := TJSONObject.Create;
-  
   // customer
   if (CustomerEmail <> '') or (CustomerPhone <> '') then begin
     aCustomer := TJSONObject.Create;
@@ -555,23 +559,16 @@ begin
     if CustomerPhone <> '' then aCustomer.Add('phone', CustomerPhone);
     aJson.Add('customer', aCustomer);
   end;
-  
+
   // items
   aItems := TJSONArray.Create;
   for Item in FItems do
     aItems.Add(Item.ToJSON);
   aJson.Add('items', aItems);
-  
+
   // tax_system_code
   if FTaxSystemCode >= 0 then
     aJson.Add('tax_system_code', FTaxSystemCode);
-  
-  Result := aJson;
-end;
-
-function TYookassaReceipt.ToReceiptJSON: TJSONObject;
-begin
-  Result := ToJSON;
 end;
 
 { TYookassaSettlement }
@@ -629,7 +626,7 @@ begin
 
     // receipt data
     if Assigned(FReceipt) then
-      aJsonReq.Add('receipt', FReceipt.ToReceiptJSON);
+      FReceipt.AppendJSON(aJsonReq);
 
     // The refund receipt requires a payment_id or a refund_id.
     if FReceiptType = 'refund' then begin

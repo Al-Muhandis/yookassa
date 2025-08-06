@@ -5,7 +5,7 @@ unit test_yookassa_api_integration;
 interface
 
 uses
-  Classes, SysUtils, fpcunit, testregistry, fpjson, yookassa_api
+  Classes, SysUtils, fpcunit, testregistry, fpjson, yookassa_api, eventlog
   ;
 
 type
@@ -17,14 +17,20 @@ type
     FPaymentResp: TYookassaPaymentResponse;
     FReceiptResp: TYookassaReceiptResponse;
     FPaymentRequest: TYookassaCreatePaymentRequest;
-    FReceiptRequest: TYookassaCreateReceiptRequest;                                     
+    FReceiptRequest: TYookassaCreateReceiptRequest;
+    FEventLog: TEventLog;
+    procedure TestLog(aEvent: TEventType; const aMsg: string);
     class procedure LoadRequestConf(aPaymentRequest: TYookassaRequest);
     class procedure LoadCreatePaymentConf(aPaymentRequest: TYookassaCreatePaymentRequest);
     class procedure LoadCreateReceiptConf(aReceiptRequest: TYookassaCreateReceiptRequest);
-    procedure UpdateTestReceipt(TestReceipt: TYookassaReceipt; aAmount: Currency; const aCurrency: string);
+    procedure UpdateTestReceipt(TestReceipt: TYookassaReceipt; aDescription: String; aAmount: Currency;
+      const aCurrency: string);
   protected
     procedure SetUp; override;
     procedure TearDown; override;
+  public
+    constructor Create; override;
+    destructor Destroy; override;
   published
     procedure TestCreatePayment;
     procedure TestCreatePaymentAndThenRequestPaymentAfter;
@@ -55,6 +61,11 @@ begin
   finally
     aFile.Free;
   end;
+end;
+
+procedure TTestYooKassaIntegration.TestLog(aEvent: TEventType; const aMsg: string);
+begin
+  FEventLog.Log(aEvent, aMsg);
 end;
 
 class procedure TTestYooKassaIntegration.LoadRequestConf(aPaymentRequest: TYookassaRequest);
@@ -99,21 +110,21 @@ begin
   end;
 end;
 
-procedure TTestYooKassaIntegration.UpdateTestReceipt(TestReceipt: TYookassaReceipt; aAmount: Currency;
-  const aCurrency: string);
+procedure TTestYooKassaIntegration.UpdateTestReceipt(TestReceipt: TYookassaReceipt; aDescription: String;
+  aAmount: Currency; const aCurrency: string);
 var
   aItem: TYookassaReceiptItem;
 begin
   TestReceipt.CustomerEmail := 'test-receipt@example.com';
 
   aItem := TYookassaReceiptItem.Create;
-  aItem.Description := 'Интеграционный тест чека';
+  aItem.Description := aDescription;
   aItem.Quantity := 1;
   aItem.AmountValue := aAmount;
   aItem.AmountCurrency := aCurrency;
-  aItem.VatCode := 1; // НДС 18%
+  aItem.VatCode := 1;
   aItem.PaymentMode := 'full_prepayment';
-  aItem.PaymentSubject := 'service';
+  aItem.PaymentSubject := 'property_right';
   TestReceipt.AddItem(aItem);
 end;
 
@@ -121,9 +132,12 @@ procedure TTestYooKassaIntegration.SetUp;
 begin
   inherited SetUp;
   FPaymentRequest := TYookassaCreatePaymentRequest.Create;
+  FPaymentRequest.OnLog:=@TestLog;
   FReceiptRequest := TYookassaCreateReceiptRequest.Create;
+  FReceiptRequest.OnLog:=@TestLog;
   FPaymentResp := nil;
   FReceiptResp := nil;
+  TestLog(etInfo, Format('Start Test %s.%s', [GetTestSuiteName, GetTestName]));
 end;
 
 procedure TTestYooKassaIntegration.TearDown;
@@ -138,6 +152,20 @@ begin
   FPaymentRequest.Free;
   FReceiptRequest.Free;
   inherited TearDown;
+end;
+
+constructor TTestYooKassaIntegration.Create;
+begin
+  inherited Create;
+  FEventLog:=TEventLog.Create(nil);
+  FEventLog.FileName:=ChangeFileExt(ParamStr(0), '.log');
+  FEventLog.LogType:=ltFile;
+end;
+
+destructor TTestYooKassaIntegration.Destroy;
+begin
+  FEventLog.Free;
+  inherited Destroy;
 end;
 
 procedure TTestYooKassaIntegration.TestCreatePayment;
@@ -197,7 +225,10 @@ begin
     end;
   until aSucceeded;
   LoadCreateReceiptConf(FReceiptRequest);
-  UpdateTestReceipt(FReceiptRequest.Receipt, FPaymentRequest.Amount, FPaymentRequest.Currency);
+  FReceiptRequest.Settlements.Add(TYookassaSettlement.Create('prepayment', FPaymentRequest.Amount,
+    FPaymentRequest.Currency));
+  UpdateTestReceipt(FReceiptRequest.Receipt, FPaymentRequest.Description, FPaymentRequest.Amount,
+    FPaymentRequest.Currency);
   FReceiptRequest.PaymentId:=aPaymentID;
   FReceiptResp:=FReceiptRequest.Execute as TYookassaReceiptResponse; 
   AssertNotNull('ReceipId must be exists', FReceiptResp.ID);
@@ -232,8 +263,9 @@ end;
 procedure TTestYooKassaIntegration.TestCreateReceipt_Sandbox;
 begin
   LoadCreateReceiptConf(FReceiptRequest);
-  UpdateTestReceipt(FReceiptRequest.Receipt, 50.00, 'RUB');
+  UpdateTestReceipt(FReceiptRequest.Receipt, 'Товар', 50.00, 'RUB');
   FReceiptRequest.ReceiptType := 'payment';
+  FReceiptRequest.Settlements.Add(TYookassaSettlement.Create('prepayment', 50, 'RUB'));
 
   FReceiptResp := FReceiptRequest.Execute as TYookassaReceiptResponse;
 
@@ -245,7 +277,7 @@ end;
 procedure TTestYooKassaIntegration.TestCreateReceiptWithPhone_Sandbox;
 begin
   LoadCreateReceiptConf(FReceiptRequest);
-  UpdateTestReceipt(FReceiptRequest.Receipt, 75.50, 'RUB');
+  UpdateTestReceipt(FReceiptRequest.Receipt, 'Товар', 75.50, 'RUB');
   FReceiptRequest.Receipt.CustomerPhone := '+79001234567';
 
   FReceiptRequest.ReceiptType := 'payment';
@@ -259,7 +291,7 @@ end;
 procedure TTestYooKassaIntegration.TestCreateReceiptWithTaxSystem_Sandbox;
 begin
   LoadCreateReceiptConf(FReceiptRequest);
-  UpdateTestReceipt(FReceiptRequest.Receipt, 120.00, 'RUB');
+  UpdateTestReceipt(FReceiptRequest.Receipt, 'Товар', 120.00, 'RUB');
   FReceiptRequest.Receipt.TaxSystemCode := 1; // УСН income
 
   FReceiptRequest.ReceiptType := 'payment';
@@ -276,7 +308,8 @@ var
 begin
   // First, we create a payment to receive the payment_id
   LoadCreatePaymentConf(FPaymentRequest);
-  UpdateTestReceipt(FReceiptRequest.Receipt, 30.00, 'RUB');
+  UpdateTestReceipt(FReceiptRequest.Receipt, FPaymentRequest.Description, FPaymentRequest.Amount,
+    FPaymentRequest.Currency);
   FPaymentResp := FPaymentRequest.Execute as TYookassaPaymentResponse;
 
   // Getting the payment_id from the response
@@ -358,8 +391,8 @@ begin
     try
       aItem.Description := 'Товар от самозанятого';
       aItem.Quantity := 1.0;
-      aItem.AmountValue := 500.00;
-      aItem.AmountCurrency := 'RUB';
+      aItem.AmountValue := FPaymentRequest.Amount;
+      aItem.AmountCurrency := FPaymentRequest.Currency;
       aItem.VatCode := 1; // НДС 18%
       aItem.PaymentMode := 'full_prepayment';
       aItem.PaymentSubject := 'commodity';

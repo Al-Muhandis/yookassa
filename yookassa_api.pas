@@ -311,20 +311,20 @@ end;
 
 function TYookassaPaymentResponse.GetId: string;
 begin
-  Result := Raw.Get('id', '');
+  Result := Raw.Get('id', EmptyStr);
 end;
 
 function TYookassaPaymentResponse.GetStatus: string;
 begin
-  Result := Raw.Get('status', '');
+  Result := Raw.Get('status', EmptyStr);
 end;
 
 function TYookassaPaymentResponse.GetConfirmationURL: string;
 begin
   if Assigned(Raw.Find('confirmation')) then
-    Result := Raw.Objects['confirmation'].Get('confirmation_url', '')
+    Result := Raw.Objects['confirmation'].Get('confirmation_url', EmptyStr)
   else
-    Result := '';
+    Result := EmptyStr;
 end;
 
 function TYookassaPaymentResponse.GetAmount: Currency;
@@ -351,7 +351,7 @@ end;
 
 function TYookassaReceiptResponse.GetStatus: string;
 begin
-  Result := Raw.Get('status', '');
+  Result := Raw.Get('status', EmptyStr);
 end;
 
 { TYookassaRequest }
@@ -498,9 +498,9 @@ function TYookassaSupplier.ToJSON: TJSONObject;
 begin
   Result := TJSONObject.Create;
   try
-    if FName <> '' then Result.Add('name', FName);
-    if FPhone <> '' then Result.Add('phone', FPhone);
-    if FInn <> '' then Result.Add('inn', FInn);
+    if FName <> EmptyStr then Result.Add('name', FName);
+    if FPhone <> EmptyStr then Result.Add('phone', FPhone);
+    if FInn <> EmptyStr then Result.Add('inn', FInn);
   except
     FreeAndNil(Result);
     raise;
@@ -533,6 +533,7 @@ end;
 
 constructor TYookassaReceiptItem.Create;
 begin
+  inherited Create;
   MarkMode := -1; // -1 = not specified
 end;
 
@@ -557,14 +558,14 @@ begin
     aAmount.Add('currency', AmountCurrency);
     Result.Add('amount', aAmount);
     Result.Add('vat_code', VatCode);
-    if PaymentMode <> '' then Result.Add('payment_mode', PaymentMode);
-    if PaymentSubject <> '' then Result.Add('payment_subject', PaymentSubject);
+    if PaymentMode <> EmptyStr then Result.Add('payment_mode', PaymentMode);
+    if PaymentSubject <> EmptyStr then Result.Add('payment_subject', PaymentSubject);
     if MarkMode >= 0 then
     begin
       Result.Add('mark_mode', MarkMode);
 
       // check MarkCodeInfo
-      if MarkCodeInfo = '' then
+      if MarkCodeInfo = EmptyStr then
         raise EYooKassaValidationError.Create('MarkCodeInfo is required when MarkMode is set');
 
       if not IsValidBase64(MarkCodeInfo) then
@@ -586,7 +587,7 @@ begin
       Result.Add('mark_code_info', aMarkCodeInfo);
     end;
 
-    if Measure <> '' then
+    if Measure <> EmptyStr then
       Result.Add('measure', Measure);
 
     // agent_type (ФФД 1.1)
@@ -640,10 +641,10 @@ var
   Item: TYookassaReceiptItem;
 begin
   // customer
-  if (CustomerEmail <> '') or (CustomerPhone <> '') then begin
+  if (CustomerEmail <> EmptyStr) or (CustomerPhone <> EmptyStr) then begin
     aCustomer := TJSONObject.Create;
-    if CustomerEmail <> '' then aCustomer.Add('email', CustomerEmail);
-    if CustomerPhone <> '' then aCustomer.Add('phone', CustomerPhone);
+    if CustomerEmail <> EmptyStr then aCustomer.Add('email', CustomerEmail);
+    if CustomerPhone <> EmptyStr then aCustomer.Add('phone', CustomerPhone);
     aJson.Add('customer', aCustomer);
   end;
 
@@ -679,7 +680,7 @@ var
 begin
   Result := TJSONObject.Create;
   try
-    if FType <> '' then
+    if FType <> EmptyStr then
       Result.Add('type', FType);
 
     aAmount := TJSONObject.Create;
@@ -734,7 +735,7 @@ begin
     EYooKassaValidationError.RaiseIfFalse(FReceipt.Items.Count > 0, 'Receipt must have at least one item');
 
     if FReceiptType = 'refund' then
-      EYooKassaValidationError.RaiseIfFalse((FPaymentId <> '') or (FRefundId <> ''),
+      EYooKassaValidationError.RaiseIfFalse((FPaymentId <> EmptyStr) or (FRefundId <> EmptyStr),
         'For refund receipt, either PaymentId or RefundId must be specified');
     // receipt type (payment/refund)
     Result.Add('type', FReceiptType);
@@ -748,9 +749,9 @@ begin
 
     // The refund receipt requires a payment_id or a refund_id.
     if FReceiptType = 'refund' then begin
-      if FPaymentId <> '' then
+      if FPaymentId <> EmptyStr then
         Result.Add('payment_id', FPaymentId)
-      else if FRefundId <> '' then
+      else if FRefundId <> EmptyStr then
         Result.Add('refund_id', FRefundId);
     end
     else
@@ -944,7 +945,7 @@ begin
     Result.Add('description', FDescription);
     Result.Add('confirmation', BuildConfirmationJSON);
     Result.Add('capture', True);
-    if FMetaOrderId <> '' then
+    if FMetaOrderId <> EmptyStr then
       Result.Add('metadata', BuildMetadataJSON);
     if Assigned(FReceipt) then
       Result.Add('receipt', FReceipt.ToJSON);

@@ -74,15 +74,20 @@ type
     function Execute: TYookassaResponse;
   end;
 
+  TYookassaAPIObject = class
+  public
+    function ToJSON: TJSONObject; virtual; abstract;
+  end;
+
   { TYookassaSupplier }
-  TYookassaSupplier = class
+  TYookassaSupplier = class(TYookassaAPIObject)
   private
     FName: string;
     FPhone: string;
     FInn: string;
   public
     constructor Create(const AName, APhone, AInn: string); overload;
-    function ToJSON: TJSONObject;
+    function ToJSON: TJSONObject; override;
     property Name: string read FName write FName;
 { Телефон поставщика (тег в 54 ФЗ — 1171). Указывается в формате ITU-T E.164, например 79000000000.
   Параметр предусмотрен форматом фискальных документов (ФФД) и является обязательным, начиная с версии 1.1. }
@@ -103,7 +108,7 @@ type
   );
 
   { TYookassaReceiptItem }
-  TYookassaReceiptItem = class
+  TYookassaReceiptItem = class(TYookassaAPIObject)
   private
     FAgentType: TYookassaAgentType;
     FSupplier: TYookassaSupplier;
@@ -122,7 +127,7 @@ type
     Measure: string;
     constructor Create;
     destructor Destroy; override;
-    function ToJSON: TJSONObject;
+    function ToJSON: TJSONObject; override;
     property AgentType: TYookassaAgentType read FAgentType write FAgentType;
     property Supplier: TYookassaSupplier read GetSupplier;
   end;
@@ -130,7 +135,7 @@ type
   TReceiptItems = specialize TFPGObjectList<TYookassaReceiptItem>;
 
   { TYookassaReceipt }
-  TYookassaReceipt = class
+  TYookassaReceipt = class(TYookassaAPIObject)
   private
     FCustomerEmail: string;
     FCustomerPhone: string;
@@ -140,7 +145,7 @@ type
     constructor Create;
     destructor Destroy; override;
     procedure AddItem(aItem: TYookassaReceiptItem);
-    function ToJSON: TJSONObject;            // to create a receipt separately
+    function ToJSON: TJSONObject;  override;
     procedure AppendJSON(aJSON: TJSONObject);
     property CustomerEmail: String read FCustomerEmail write FCustomerEmail;
     property CustomerPhone: String read FCustomerPhone write FCustomerPhone;
@@ -149,7 +154,7 @@ type
   end;
 
   { TYookassaSettlement }
-  TYookassaSettlement = class
+  TYookassaSettlement = class(TYookassaAPIObject)
   private
     FType: string;     // 'cash' or 'bank_card'
     FAmountValue: Currency;
@@ -157,7 +162,7 @@ type
   public
     constructor Create; overload;
     constructor Create(const aType: string; aAmount: Currency; const aCurrency: string); overload;
-    function ToJSON: TJSONObject;
+    function ToJSON: TJSONObject; override;
     property SettlementType: string read FType write FType;
     property Amount: Currency read FAmountValue write FAmountValue;
     property Currency: string read FAmountCurrency write FAmountCurrency;

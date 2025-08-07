@@ -23,7 +23,7 @@ type
     class procedure LoadRequestConf(aPaymentRequest: TYookassaRequest);
     class procedure LoadCreatePaymentConf(aPaymentRequest: TYookassaCreatePaymentRequest);
     class procedure LoadCreateReceiptConf(aReceiptRequest: TYookassaCreateReceiptRequest);
-    procedure UpdateTestReceipt(TestReceipt: TYookassaReceipt; aDescription: String; aAmount: Currency;
+    class procedure UpdateTestReceipt(TestReceipt: TYookassaReceipt; aDescription: String; aAmount: Currency;
       const aCurrency: string);
   protected
     procedure SetUp; override;
@@ -104,28 +104,41 @@ begin
   aIni := TIniFile.Create(ExtractFilePath(ParamStr(0)) + 'config.ini');
   try
     LoadRequestConf(aReceiptRequest);
-    aReceiptRequest.Send      := aIni.ReadBool('receipt', 'Send', True);
+    aReceiptRequest.Send := aIni.ReadBool('receipt', 'Send', True);
   finally
     aIni.Free;
   end;
 end;
 
-procedure TTestYooKassaIntegration.UpdateTestReceipt(TestReceipt: TYookassaReceipt; aDescription: String;
+class procedure TTestYooKassaIntegration.UpdateTestReceipt(TestReceipt: TYookassaReceipt; aDescription: String;
   aAmount: Currency; const aCurrency: string);
 var
   aItem: TYookassaReceiptItem;
+  aIni: TIniFile;
 begin
-  TestReceipt.CustomerEmail := 'test-receipt@example.com';
+  aIni := TIniFile.Create(ExtractFilePath(ParamStr(0)) + 'config.ini');
+  try
+    TestReceipt.CustomerEmail := aIni.ReadString('receipt', 'customer.email', 'test-receipt@example.com');
 
-  aItem := TYookassaReceiptItem.Create;
-  aItem.Description := aDescription;
-  aItem.Quantity := 1;
-  aItem.AmountValue := aAmount;
-  aItem.AmountCurrency := aCurrency;
-  aItem.VatCode := 1;
-  aItem.PaymentMode := 'full_prepayment';
-  aItem.PaymentSubject := 'property_right';
-  TestReceipt.AddItem(aItem);
+    aItem := TYookassaReceiptItem.Create;
+    aItem.Description := aDescription;
+    aItem.Quantity := 1;
+    aItem.AmountValue := aAmount;
+    aItem.AmountCurrency := aCurrency;
+    aItem.VatCode := 1;
+    aItem.PaymentMode := 'full_prepayment';
+    aItem.PaymentSubject := 'property_right';
+
+    aItem.Supplier.Name := 'Иванов И.П.';
+    aItem.Supplier.Phone := '79001234567';
+    aItem.Supplier.Inn := '123456789012';
+
+    aItem.AgentType:=atAgent;
+
+    TestReceipt.AddItem(aItem);
+  finally
+    aIni.Free;
+  end;
 end;
 
 procedure TTestYooKassaIntegration.SetUp;

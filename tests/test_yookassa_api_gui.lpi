@@ -164,6 +164,9 @@
       <Item>
         <Name Value="EYooKassaValidationError"/>
       </Item>
+      <Item>
+        <Name Value="EJSONParser"/>
+      </Item>
     </Exceptions>
   </Debugging>
 </CONFIG>

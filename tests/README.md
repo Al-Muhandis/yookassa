@@ -19,11 +19,15 @@ Example of `config.ini`:
 [shop]
 ShopId = YOUR_SHOP_ID
 secret_key = YOUR_SECRET_KEY
+
 [order]
 Amount=10.00
 Currency=RUB
 Description=FreePascal test for Yookassa API
 ReturnUrl=https://example.com/return
+
+[receipt]
+customer.email=test-customer@example.com
 # Add other configuration values if required
 ```
 

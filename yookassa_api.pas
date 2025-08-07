@@ -71,7 +71,6 @@ type
     property ShopId: string read FShopId write FShopId;
     property SecretKey: string read FSecretKey write FSecretKey;
     constructor Create; virtual;
-    destructor Destroy; override;
     function Execute: TYookassaResponse;
   end;
 
@@ -85,14 +84,30 @@ type
     constructor Create(const AName, APhone, AInn: string); overload;
     function ToJSON: TJSONObject;
     property Name: string read FName write FName;
+{ Телефон поставщика (тег в 54 ФЗ — 1171). Указывается в формате ITU-T E.164, например 79000000000.
+  Параметр предусмотрен форматом фискальных документов (ФФД) и является обязательным, начиная с версии 1.1. }
     property Phone: string read FPhone write FPhone;
     property Inn: string read FInn write FInn;
   end;
 
+  { Types of agents according to ФФД 1.1 }
+  TYookassaAgentType = (
+    atNone,                 // Not specified
+    atBankingPaymentAgent,  // banking_payment_agent
+    atBankingPaymentSubagent, // banking_payment_subagent
+    atPaymentAgent,         // payment_agent
+    atPaymentSubagent,      // payment_subagent
+    atAttorney,             // attorney
+    atCommissioner,         // commissioner
+    atAgent                 // agent
+  );
+
   { TYookassaReceiptItem }
   TYookassaReceiptItem = class
   private
+    FAgentType: TYookassaAgentType;
     FSupplier: TYookassaSupplier;
+    function GetAgentTypeString: string;
     function GetSupplier: TYookassaSupplier;
   public
     Description: string;
@@ -108,6 +123,7 @@ type
     constructor Create;
     destructor Destroy; override;
     function ToJSON: TJSONObject;
+    property AgentType: TYookassaAgentType read FAgentType write FAgentType;
     property Supplier: TYookassaSupplier read GetSupplier;
   end;
 
@@ -339,11 +355,6 @@ begin
   FApiBaseUrl := GetDefaultApiBaseUrl;
 end;
 
-destructor TYookassaRequest.Destroy;
-begin
-  inherited Destroy;
-end;
-
 function TYookassaRequest.GetAuthHeader: string;
 begin
   Result := 'Basic ' + EncodeStringBase64(FShopId + ':' + FSecretKey);
@@ -476,6 +487,21 @@ end;
 
 { TYookassaReceiptItem }
 
+function TYookassaReceiptItem.GetAgentTypeString: string;
+begin
+  case FAgentType of
+    atBankingPaymentAgent:   Result := 'banking_payment_agent';
+    atBankingPaymentSubagent: Result := 'banking_payment_subagent';
+    atPaymentAgent:          Result := 'payment_agent';
+    atPaymentSubagent:       Result := 'payment_subagent';
+    atAttorney:              Result := 'attorney';
+    atCommissioner:          Result := 'commissioner';
+    atAgent:                 Result := 'agent';
+  else
+    Result := EmptyStr;
+  end;
+end;
+
 function TYookassaReceiptItem.GetSupplier: TYookassaSupplier;
 begin
   if not Assigned(FSupplier) then
@@ -498,7 +524,7 @@ function TYookassaReceiptItem.ToJSON: TJSONObject;
 var
   aAmount: TJSONObject;
   aMarkCodeInfo: TJSONObject;
-  aMarkCodeBytes: String;
+  aMarkCodeBytes, aAgentTypeStr: String;
 begin
   Result := TJSONObject.Create;
   try
@@ -540,6 +566,11 @@ begin
 
     if Measure <> '' then
       Result.Add('measure', Measure);
+
+    // agent_type (ФФД 1.1)
+    aAgentTypeStr := GetAgentTypeString;
+    if aAgentTypeStr <> EmptyStr then
+      Result.Add('agent_type', aAgentTypeStr);
 
     if Assigned(FSupplier) then
       Result.Add('supplier', FSupplier.ToJSON);

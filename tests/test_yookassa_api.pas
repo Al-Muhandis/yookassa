@@ -14,7 +14,8 @@ type
 
   TTestableCreatePayment = class(TYookassaCreatePaymentRequest)
   public
-    function BuildRequestJSONTest: String;
+    function BuildRequestJSON: String; override;
+    procedure TestToJSON;
   end;
 
   { TTestableCreateReceiptRequest }
@@ -44,6 +45,7 @@ type
     FReceiptRequest: TTestableCreateReceiptRequest;
     FTestItem: TYookassaReceiptItem;
     procedure CallToJSON;
+    procedure FillPaymentData(aPayment: TYookassaCreatePaymentRequest);
     procedure LogHandler(aEvent: TEventType; const aMsg: string);
     procedure CreatePaymentStaticHandler;
     class procedure AddProductToReceipt(aReceipt: TYookassaReceipt; const aProductDescription: String; aVatCode: Integer=1;
@@ -68,6 +70,10 @@ type
     procedure TestReceiptRequestBuildRefundJSON;
     procedure TestReceiptRequestCreate;
     procedure TestReceiptResponseParsing;
+    procedure TestReceiver_BankAccount_ToJSON;
+    procedure TestReceiver_MobileBalance_ToJSON;
+    procedure TestReceiver_DigitalWallet_ToJSON;
+    procedure TestReceiver_Validation_MissingFields;
     procedure TestSettlements_ToJSON;
     procedure TestSupplier_InReceiptItemToJSON;
     procedure TestLogging;
@@ -82,9 +88,14 @@ uses
 
 { TTestableCreatePayment }
 
-function TTestableCreatePayment.BuildRequestJSONTest: String;
+function TTestableCreatePayment.BuildRequestJSON: String;
 begin
-  Result:=BuildRequestJSON;
+  Result:=inherited BuildRequestJSON;
+end;
+
+procedure TTestableCreatePayment.TestToJSON;
+begin
+  BuildRequestJSON;
 end;
 
 { TTestableCreateReceiptRequest }
@@ -121,6 +132,14 @@ var
 begin
   aJSON:=FTestItem.ToJSON;
   aJSON.Free;
+end;
+
+procedure TTestYooKassa.FillPaymentData(aPayment: TYookassaCreatePaymentRequest);
+begin
+  aPayment.Amount := 123.45;
+  aPayment.Currency := 'RUB';
+  aPayment.Description := 'Test payment';
+  aPayment.ReturnUrl:='https://sample.com/';
 end;
 
 procedure TTestYooKassa.LogHandler(aEvent: TEventType; const aMsg: string);
@@ -169,10 +188,7 @@ procedure TTestYooKassa.TestBuildRequestData;
 var
   aJSON: String;
 begin
-  FPaymentRequest.Amount := 123.45;
-  FPaymentRequest.Currency := 'RUB';
-  FPaymentRequest.Description := 'Test payment';
-  FPaymentRequest.ReturnUrl:='https://sample.com/';
+  FillPaymentData(FPaymentRequest);
   aJSON := FPaymentRequest.BuildRequestJSON;
   AssertTrue(Pos('"amount"', aJSON) > 0);
   AssertTrue(Pos('"value" : "123.45"', aJSON) > 0);
@@ -496,6 +512,117 @@ begin
     end;
   finally
     // aRaw freed in Destroy
+  end;
+end;
+
+procedure TTestYooKassa.TestReceiver_BankAccount_ToJSON;
+var
+  aPayment: TTestableCreatePayment;
+  aJSON, aReceiver: TJSONObject;
+begin
+  aPayment := TTestableCreatePayment.Create;
+  try
+    FillPaymentData(aPayment);
+
+    aPayment.Receiver.ReceiverType := rtBankAccount;
+    aPayment.Receiver.AccountNumber := '12345678901234567890';
+    aPayment.Receiver.Bic := '044525225';
+
+    aJSON := TJSONObject(GetJSON(aPayment.BuildRequestJSON));
+    try
+      AssertTrue('receiver must be in JSON', Assigned(aJSON.Find('receiver')));
+      aReceiver := aJSON.Objects['receiver'];
+      AssertEquals('bank_account', aReceiver.Get('type', ''));
+      AssertEquals('12345678901234567890', aReceiver.Get('account_number', ''));
+      AssertEquals('044525225', aReceiver.Get('bic', ''));
+    finally
+      aJSON.Free;
+    end;
+  finally
+    aPayment.Free;
+  end;
+end;
+
+procedure TTestYooKassa.TestReceiver_MobileBalance_ToJSON;
+var
+  aPayment: TTestableCreatePayment;
+  aJSON, aReceiver: TJSONObject;
+begin
+  aPayment := TTestableCreatePayment.Create;
+  try
+    FillPaymentData(aPayment);
+    aPayment.Receiver.ReceiverType := rtMobileBalance;
+    aPayment.Receiver.Phone := '79001234567';
+
+    aJSON := TJSONObject(GetJSON(aPayment.BuildRequestJSON));
+    try
+      AssertTrue('receiver must be in JSON', Assigned(aJSON.Find('receiver')));
+      aReceiver := aJSON.Objects['receiver'];
+      AssertEquals('mobile_balance', aReceiver.Get('type', ''));
+      AssertEquals('79001234567', aReceiver.Get('phone', ''));
+      AssertFalse('account_number must not be present', Assigned(aReceiver.Find('account_number')));
+      AssertFalse('bic must not be present', Assigned(aReceiver.Find('bic')));
+    finally
+      aJSON.Free;
+    end;
+  finally
+    aPayment.Free;
+  end;
+end;
+
+procedure TTestYooKassa.TestReceiver_DigitalWallet_ToJSON;
+var
+  aPayment: TTestableCreatePayment;
+  aJSON, aReceiver: TJSONObject;
+begin
+  aPayment := TTestableCreatePayment.Create;
+  try
+    FillPaymentData(aPayment);
+    aPayment.Receiver.ReceiverType := rtDigitalWallet;
+    aPayment.Receiver.AccountNumber := 'W1234567890';
+
+    aJSON := TJSONObject(GetJSON(aPayment.BuildRequestJSON));
+    try
+      AssertTrue('receiver must be in JSON', Assigned(aJSON.Find('receiver')));
+      aReceiver := aJSON.Objects['receiver'];
+      AssertEquals('digital_wallet', aReceiver.Get('type', ''));
+      AssertEquals('W1234567890', aReceiver.Get('account_number', ''));
+      AssertFalse('bic must not be present', Assigned(aReceiver.Find('bic')));
+      AssertFalse('phone must not be present', Assigned(aReceiver.Find('phone')));
+    finally
+      aJSON.Free;
+    end;
+  finally
+    aPayment.Free;
+  end;
+end;
+
+procedure TTestYooKassa.TestReceiver_Validation_MissingFields;
+var
+  aPayment: TTestableCreatePayment;
+begin
+  aPayment := TTestableCreatePayment.Create;
+  try
+    FillPaymentData(aPayment);
+    // An attempt to serialize without required fields
+    aPayment.Receiver.ReceiverType := rtBankAccount;
+    aPayment.Receiver.AccountNumber := '';
+    aPayment.Receiver.Bic := '044525225';
+    AssertException(EYooKassaValidationError, @aPayment.TestToJSON);
+
+    aPayment.Receiver.AccountNumber := '12345678901234567890';
+    aPayment.Receiver.Bic := '';
+    AssertException(EYooKassaValidationError, @aPayment.TestToJSON);
+
+    aPayment.Receiver.ReceiverType := rtMobileBalance;
+    aPayment.Receiver.Phone := '';
+    AssertException(EYooKassaValidationError, @aPayment.TestToJSON);
+
+    aPayment.Receiver.ReceiverType := rtDigitalWallet;
+    aPayment.Receiver.AccountNumber := '';
+    AssertException(EYooKassaValidationError, @aPayment.TestToJSON);
+  finally
+    aPayment.Free;
   end;
 end;
 

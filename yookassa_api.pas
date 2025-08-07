@@ -178,18 +178,41 @@ type
       const aReceiptType: string; const aPaymentId: string; aSend: Boolean): TYookassaReceiptResponse;
   end;
 
+  { TYookassaReceiverType }
+  TYookassaReceiverType = (rtUnknown, rtBankAccount, rtMobileBalance, rtDigitalWallet);
+
+  { TYookassaReceiver }
+  TYookassaReceiver = class
+  private
+    FReceiverType: TYookassaReceiverType;
+    FAccountNumber: string;
+    FBic: string;
+    FPhone: string;
+    function GetTypeString: string;
+  public
+    constructor Create; overload;
+    constructor Create(aType: TYookassaReceiverType); overload;
+    function ToJSON: TJSONObject;
+    property ReceiverType: TYookassaReceiverType read FReceiverType write FReceiverType;
+    property AccountNumber: string read FAccountNumber write FAccountNumber;
+    property Bic: string read FBic write FBic;
+    property Phone: string read FPhone write FPhone;
+  end;
+
  { TYookassaCreatePaymentRequest }
   TYookassaCreatePaymentRequest = class(TYookassaRequest)
   private
     FAmount: Currency;
     FCurrency: string;
-    FDescription: string;
+    FDescription: string;        
+    FMetaOrderId: string;
     FReturnUrl: string;
     FReceipt: TYookassaReceipt;
-    FMetaOrderId: string;
+    FReceiver: TYookassaReceiver;
     function BuildAmountJSON: TJSONObject;
     function BuildConfirmationJSON: TJSONObject;
     function BuildMetadataJSON: TJSONObject;
+    function GetReceiver: TYookassaReceiver;
   protected
     function BuildRequestJSON: string; override;  
     function CreateResponse(aRaw: TJSONObject): TYookassaResponse; override;
@@ -200,6 +223,7 @@ type
     property Amount: Currency read FAmount write FAmount;
     property Currency: string read FCurrency write FCurrency;
     property Description: string read FDescription write FDescription;
+    property Receiver: TYookassaReceiver read GetReceiver;
     property ReturnUrl: string read FReturnUrl write FReturnUrl;
     property Receipt: TYookassaReceipt read FReceipt write FReceipt;
     property MetaOrderId: string read FMetaOrderId write FMetaOrderId;
@@ -440,9 +464,14 @@ end;
 function TYookassaSupplier.ToJSON: TJSONObject;
 begin
   Result := TJSONObject.Create;
-  if FName <> '' then Result.Add('name', FName);
-  if FPhone <> '' then Result.Add('phone', FPhone);
-  if FInn <> '' then Result.Add('inn', FInn);
+  try
+    if FName <> '' then Result.Add('name', FName);
+    if FPhone <> '' then Result.Add('phone', FPhone);
+    if FInn <> '' then Result.Add('inn', FInn);
+  except
+    FreeAndNil(Result);
+    raise;
+  end;
 end;
 
 { TYookassaReceiptItem }
@@ -543,7 +572,12 @@ end;
 function TYookassaReceipt.ToJSON: TJSONObject;
 begin
   Result := TJSONObject.Create;
-  AppendJSON(Result);
+  try
+    AppendJSON(Result);
+  except
+    FreeAndNil(Result);
+    raise;
+  end;
 end;
 
 procedure TYookassaReceipt.AppendJSON(aJSON: TJSONObject);
@@ -591,14 +625,18 @@ var
   aAmount: TJSONObject;
 begin
   Result := TJSONObject.Create;
+  try
+    if FType <> '' then
+      Result.Add('type', FType);
 
-  if FType <> '' then
-    Result.Add('type', FType);
-
-  aAmount := TJSONObject.Create;
-  aAmount.Add('value', Format('%.2f', [FAmountValue], _FrmtStngsJSON));
-  aAmount.Add('currency', FAmountCurrency);
-  Result.Add('amount', aAmount);
+    aAmount := TJSONObject.Create;
+    aAmount.Add('value', Format('%.2f', [FAmountValue], _FrmtStngsJSON));
+    aAmount.Add('currency', FAmountCurrency);
+    Result.Add('amount', aAmount);
+  except
+    FreeAndNil(Result);
+    raise;
+  end;
 end;
 
 { TYookassaCreateReceiptRequest }
@@ -634,7 +672,9 @@ begin
         aJsonReq.Add('payment_id', FPaymentId)
       else if FRefundId <> '' then
         aJsonReq.Add('refund_id', FRefundId);
-    end;
+    end
+    else
+      aJsonReq.Add('payment_id', FPaymentId);
 
     // A list of settlings or payments
     if Assigned(FSettlements) and (FSettlements.Count > 0) then
@@ -715,6 +755,62 @@ begin
   end;
 end;
 
+{ TYookassaReceiver }
+
+constructor TYookassaReceiver.Create;
+begin
+  inherited Create;
+  FReceiverType := rtBankAccount;
+end;
+
+constructor TYookassaReceiver.Create(aType: TYookassaReceiverType);
+begin
+  inherited Create;
+  FReceiverType := aType;
+end;
+
+function TYookassaReceiver.GetTypeString: string;
+begin
+  case FReceiverType of
+    rtBankAccount: Result := 'bank_account';
+    rtMobileBalance: Result := 'mobile_balance';
+    rtDigitalWallet: Result := 'digital_wallet';
+  else
+    Result := EmptyStr;
+  end;
+end;
+
+function TYookassaReceiver.ToJSON: TJSONObject;
+begin
+  Result := TJSONObject.Create;
+  try
+    Result.Add('type', GetTypeString);
+
+    case FReceiverType of
+      rtBankAccount:
+        begin
+          EYooKassaValidationError.RaiseIfEmpty(FAccountNumber, 'AccountNumber');
+          EYooKassaValidationError.RaiseIfEmpty(FBic, 'Bic');
+          Result.Add('account_number', FAccountNumber);
+          Result.Add('bic', FBic);
+        end;
+      rtMobileBalance:
+        begin
+          EYooKassaValidationError.RaiseIfEmpty(FPhone, 'Phone');
+          Result.Add('phone', FPhone);
+        end;
+      rtDigitalWallet:
+        begin
+          EYooKassaValidationError.RaiseIfEmpty(FAccountNumber, 'AccountNumber');
+          Result.Add('account_number', FAccountNumber);
+        end;
+    end;
+  except
+    FreeAndNil(Result);
+    raise;
+  end;
+end;
+
 { TYookassaCreatePaymentRequest }
 
 function TYookassaCreatePaymentRequest.BuildAmountJSON: TJSONObject;
@@ -735,6 +831,13 @@ function TYookassaCreatePaymentRequest.BuildMetadataJSON: TJSONObject;
 begin
   Result := TJSONObject.Create;
   Result.Add('order_id', FMetaOrderId);
+end;
+
+function TYookassaCreatePaymentRequest.GetReceiver: TYookassaReceiver;
+begin
+  if not Assigned(FReceiver) then
+    FReceiver := TYookassaReceiver.Create(rtBankAccount);
+  Result := FReceiver;
 end;
 
 function TYookassaCreatePaymentRequest.CreateResponse(aRaw: TJSONObject): TYookassaResponse;
@@ -761,6 +864,9 @@ begin
       aJsonReq.Add('metadata', BuildMetadataJSON);
     if Assigned(FReceipt) then
       aJsonReq.Add('receipt', FReceipt.ToJSON);
+    // receiver (for payout to bank, phone, wallet)
+    if Assigned(FReceiver) then
+      aJsonReq.Add('receiver', FReceiver.ToJSON);  
     Result := aJsonReq.AsJSON;
   finally
     aJsonReq.Free;
@@ -799,6 +905,7 @@ end;
 
 destructor TYookassaCreatePaymentRequest.Destroy;
 begin
+  FReceiver.Free;
   FReceipt.Free;
   inherited Destroy;
 end;

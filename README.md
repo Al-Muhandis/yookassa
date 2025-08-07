@@ -1,7 +1,7 @@
 
 ---
 
-# YooKassa API Client for Free Pascal
+# YooKassa/ЮКасса API Client for Free Pascal
 
 Обёртка для [YooKassa API](https://yookassa.ru/developers) на языке Free Pascal (Lazarus / FPC).
 

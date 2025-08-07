@@ -14,15 +14,7 @@ type
 
   TTestableCreatePayment = class(TYookassaCreatePaymentRequest)
   public
-    function BuildRequestJSON: String; override;
     procedure TestToJSON;
-  end;
-
-  { TTestableCreateReceiptRequest }
-
-  TTestableCreateReceiptRequest = class(TYookassaCreateReceiptRequest)
-  public
-    function BuildRequestJSON: String; override;
   end;
 
   { TTestableGetPaymentRequest }
@@ -32,7 +24,6 @@ type
     class var FTestRaw: TJSONObject;
   protected
     function DoExecute: String; override;
-    function BuildRequestJSON: string; override;
     function CreateResponse(aRaw: TJSONObject): TYookassaResponse; override;
     class property TestRaw: TJSONObject read FTestRaw write FTestRaw;
   end;
@@ -88,21 +79,9 @@ uses
 
 { TTestableCreatePayment }
 
-function TTestableCreatePayment.BuildRequestJSON: String;
-begin
-  Result:=inherited BuildRequestJSON;
-end;
-
 procedure TTestableCreatePayment.TestToJSON;
 begin
-  BuildRequestJSON;
-end;
-
-{ TTestableCreateReceiptRequest }
-
-function TTestableCreateReceiptRequest.BuildRequestJSON: String;
-begin
-  Result:=inherited BuildRequestJSON;
+  ToJSON.Free;
 end;
 
 { TTestableGetPaymentRequest }
@@ -112,11 +91,6 @@ begin
   if not Assigned(FTestRaw) then
     raise Exception.Create(Format('Set up json RAW for %s', [Self.ClassName]));
   Result:=FTestRaw.AsJSON;
-end;
-
-function TTestableGetPaymentRequest.BuildRequestJSON: string;
-begin
-  Result:=inherited BuildRequestJSON;
 end;
 
 function TTestableGetPaymentRequest.CreateResponse(aRaw: TJSONObject): TYookassaResponse;
@@ -186,10 +160,16 @@ end;
 
 procedure TTestYooKassa.TestBuildRequestData;
 var
-  aJSON: String;
+  o: TJSONObject;
+  aJSON: TJSONStringType;
 begin
   FillPaymentData(FPaymentRequest);
-  aJSON := FPaymentRequest.BuildRequestJSON;
+  o := FPaymentRequest.ToJSON;
+  try
+    aJSON:=o.AsJSON;
+  finally
+    o.Free;
+  end;
   AssertTrue(Pos('"amount"', aJSON) > 0);
   AssertTrue(Pos('"value" : "123.45"', aJSON) > 0);
 end;
@@ -202,10 +182,16 @@ end;
 procedure TTestYooKassa.TestGetPaymentRequest_BuildRequestJSON;
 var
   aReq: TTestableGetPaymentRequest;
+  o: TJSONObject;
 begin
   aReq := TTestableGetPaymentRequest.Create;
   try
-    AssertEquals('GET request should have no body', '', aReq.BuildRequestJSON);
+    o:=aReq.ToJSON;
+    try
+      AssertNull('GET request should have no body', o);
+    finally
+      o.Free;
+    end;
   finally
     aReq.Free;
   end;
@@ -435,28 +421,25 @@ end;
 
 procedure TTestYooKassa.TestReceiptRequestBuildJSON;
 var
-  aJSON: String;
-  aParsedJSON: TJSONObject;
+  aJSON: TJSONObject;
 begin
   AddProductToReceipt(FReceiptRequest.Receipt, 'Тестовый товар', 1);
 
   FReceiptRequest.ReceiptType := 'payment';
   FReceiptRequest.Send := True;
 
-  aJSON := FReceiptRequest.BuildRequestJSON;
-  aParsedJSON := TJSONObject(GetJSON(aJSON));
+  aJSON := FReceiptRequest.ToJSON;
   try
-    AssertEquals('payment', aParsedJSON.Strings['type']);
-    AssertEquals(True, aParsedJSON.Booleans['send']);
+    AssertEquals('payment', aJSON.Strings['type']);
+    AssertEquals(True, aJSON.Booleans['send']);
   finally
-    aParsedJSON.Free;
+    aJSON.Free;
   end;
 end;
 
 procedure TTestYooKassa.TestReceiptRequestBuildRefundJSON;
 var
-  aJSON: String;
-  aParsedJSON: TJSONObject;
+  aJSON: TJSONObject;
 begin
   AddProductToReceipt(FReceiptRequest.Receipt, 'Возврат товара', 2);
 
@@ -464,14 +447,13 @@ begin
   FReceiptRequest.PaymentId := 'payment_123456';
   FReceiptRequest.Send := False;
 
-  aJSON := FReceiptRequest.BuildRequestJSON;
-  aParsedJSON := TJSONObject(GetJSON(aJSON));
+  aJSON := FReceiptRequest.ToJSON;
   try
-    AssertEquals('refund', aParsedJSON.Strings['type']);
-    AssertEquals(False, aParsedJSON.Booleans['send']);
-    AssertEquals('payment_123456', aParsedJSON.Strings['payment_id']);
+    AssertEquals('refund', aJSON.Strings['type']);
+    AssertEquals(False, aJSON.Booleans['send']);
+    AssertEquals('payment_123456', aJSON.Strings['payment_id']);
   finally
-    aParsedJSON.Free;
+    aJSON.Free;
   end;
 end;
 
@@ -528,7 +510,7 @@ begin
     aPayment.Receiver.AccountNumber := '12345678901234567890';
     aPayment.Receiver.Bic := '044525225';
 
-    aJSON := TJSONObject(GetJSON(aPayment.BuildRequestJSON));
+    aJSON := aPayment.ToJSON;
     try
       AssertTrue('receiver must be in JSON', Assigned(aJSON.Find('receiver')));
       aReceiver := aJSON.Objects['receiver'];
@@ -554,7 +536,7 @@ begin
     aPayment.Receiver.ReceiverType := rtMobileBalance;
     aPayment.Receiver.Phone := '79001234567';
 
-    aJSON := TJSONObject(GetJSON(aPayment.BuildRequestJSON));
+    aJSON := aPayment.ToJSON;
     try
       AssertTrue('receiver must be in JSON', Assigned(aJSON.Find('receiver')));
       aReceiver := aJSON.Objects['receiver'];
@@ -581,7 +563,7 @@ begin
     aPayment.Receiver.ReceiverType := rtDigitalWallet;
     aPayment.Receiver.AccountNumber := 'W1234567890';
 
-    aJSON := TJSONObject(GetJSON(aPayment.BuildRequestJSON));
+    aJSON := aPayment.ToJSON;
     try
       AssertTrue('receiver must be in JSON', Assigned(aJSON.Find('receiver')));
       aReceiver := aJSON.Objects['receiver'];
@@ -645,7 +627,7 @@ begin
 
     AddProductToReceipt(aReceiptReq.Receipt, 'Некий продукт');
 
-    aJSON := TJSONObject(GetJSON(aReceiptReq.BuildRequestJSON));
+    aJSON := aReceiptReq.ToJSON;
     try
       AssertTrue('Settlements array must be in JSON', Assigned(aJSON.Find('settlements')));
       aSettlementsArray := aJSON.Arrays['settlements'];

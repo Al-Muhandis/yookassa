@@ -48,19 +48,26 @@ type
     property ID: String read GetId;
   end;
 
+  { TYookassaAPIObject }
+
+  TYookassaAPIObject = class
+  public
+    function ToJSON: TJSONObject; virtual; abstract;
+  end;
+
   { Base class for request at YooKassa API }
   { TYookassaRequest }
-  TYookassaRequest = class
+  TYookassaRequest = class(TYookassaAPIObject)
   private
     FApiBaseUrl: string;
     FOnLog: TYookassaLogEvent;
     FShopId: string;
-    FSecretKey: string;                     
+    FSecretKey: string;
+    function BuildRequestJSON: string;
     function GenerateIdempotenceKey: string;
     function GetAuthHeader: string;
     function GetDefaultApiBaseUrl: string;
   protected
-    function BuildRequestJSON: string; virtual; abstract;
     function CreateResponse(aRaw: TJSONObject): TYookassaResponse; virtual; abstract;
     function GetEndpoint: string; virtual; abstract;
     function GetMethod: string; virtual; abstract;
@@ -72,11 +79,6 @@ type
     property SecretKey: string read FSecretKey write FSecretKey;
     constructor Create; virtual;
     function Execute: TYookassaResponse;
-  end;
-
-  TYookassaAPIObject = class
-  public
-    function ToJSON: TJSONObject; virtual; abstract;
   end;
 
   { TYookassaSupplier }
@@ -182,13 +184,13 @@ type
     function GetReceipt: TYookassaReceipt;
     function GetSettlements: TSettlementsList;
   protected
-    function BuildRequestJSON: string; override;
     function CreateResponse(aRaw: TJSONObject): TYookassaResponse; override;
     function GetEndpoint: string; override;
     function GetMethod: string; override;
   public
     constructor Create; override;
     destructor Destroy; override;
+    function ToJSON: TJSONObject; override;
     property ReceiptType: string read FReceiptType write FReceiptType;
     property PaymentId: string read FPaymentId write FPaymentId;
     property RefundId: string read FRefundId write FRefundId;
@@ -235,12 +237,12 @@ type
     function BuildMetadataJSON: TJSONObject;
     function GetReceiver: TYookassaReceiver;
   protected
-    function BuildRequestJSON: string; override;  
     function CreateResponse(aRaw: TJSONObject): TYookassaResponse; override;
     function GetEndpoint: string; override;
     function GetMethod: string; override;
   public
     destructor Destroy; override;
+    function ToJSON: TJSONObject; override;
     property Amount: Currency read FAmount write FAmount;
     property Currency: string read FCurrency write FCurrency;
     property Description: string read FDescription write FDescription;
@@ -257,11 +259,11 @@ type
   private
     FPaymentId: string;
   protected
-    function BuildRequestJSON: string; override;
     function GetEndpoint: string; override;
     function GetMethod: string; override;
     function CreateResponse(aRaw: TJSONObject): TYookassaResponse; override;
   public
+    function ToJSON: TJSONObject; override;
     property PaymentId: string read FPaymentId write FPaymentId;
     class function GetPayment(const aShopId, aSecretKey, aPaymentId: string): TYookassaPaymentResponse;
   end;
@@ -385,6 +387,21 @@ procedure TYookassaRequest.Log(aEvent: TEventType; const Msg: string);
 begin
   if Assigned(FOnLog) then
     FOnLog(aEvent, Msg);
+end;
+
+function TYookassaRequest.BuildRequestJSON: string;
+var
+  aJSON: TJSONObject;
+begin
+  aJSON:=ToJSON;
+  try
+    if Assigned(aJSON) then
+      Result:=aJSON.AsJSON
+    else
+      Result:=EmptyStr;
+  finally
+    aJSON.Free;
+  end;
 end;
 
 function TYookassaRequest.DoExecute: String;
@@ -677,56 +694,6 @@ end;
 
 { TYookassaCreateReceiptRequest }
 
-function TYookassaCreateReceiptRequest.BuildRequestJSON: string;
-var
-  aJsonReq: TJSONObject;
-  aSettlementsArray: TJSONArray;
-  aSettlement: TYookassaSettlement;
-begin
-  EYooKassaValidationError.RaiseIfNil(FReceipt, 'Receipt');
-  EYooKassaValidationError.RaiseIfFalse(FReceipt.Items.Count > 0, 'Receipt must have at least one item');
-
-  if FReceiptType = 'refund' then
-    EYooKassaValidationError.RaiseIfFalse((FPaymentId <> '') or (FRefundId <> ''),
-      'For refund receipt, either PaymentId or RefundId must be specified');
-
-  aJsonReq := TJSONObject.Create;
-  try
-    // receipt type (payment/refund)
-    aJsonReq.Add('type', FReceiptType);
-
-    // whether to send the receipt
-    aJsonReq.Add('send', FSend);
-
-    // receipt data
-    if Assigned(FReceipt) then
-      FReceipt.AppendJSON(aJsonReq);
-
-    // The refund receipt requires a payment_id or a refund_id.
-    if FReceiptType = 'refund' then begin
-      if FPaymentId <> '' then
-        aJsonReq.Add('payment_id', FPaymentId)
-      else if FRefundId <> '' then
-        aJsonReq.Add('refund_id', FRefundId);
-    end
-    else
-      aJsonReq.Add('payment_id', FPaymentId);
-
-    // A list of settlings or payments
-    if Assigned(FSettlements) and (FSettlements.Count > 0) then
-    begin
-      aSettlementsArray := TJSONArray.Create;
-      for aSettlement in FSettlements do
-        aSettlementsArray.Add(aSettlement.ToJSON);
-      aJsonReq.Add('settlements', aSettlementsArray);
-    end;
-
-    Result := aJsonReq.AsJSON;
-  finally
-    aJsonReq.Free;
-  end;
-end;
-
 function TYookassaCreateReceiptRequest.CreateResponse(aRaw: TJSONObject): TYookassaResponse;
 begin
   Result:=TYookassaReceiptResponse.Create(ARaw);
@@ -754,6 +721,53 @@ begin
   FSettlements.Free;
   FReceipt.Free;
   inherited Destroy;
+end;
+
+function TYookassaCreateReceiptRequest.ToJSON: TJSONObject;
+var
+  aSettlementsArray: TJSONArray;
+  aSettlement: TYookassaSettlement;
+begin
+  Result := TJSONObject.Create;
+  try
+    EYooKassaValidationError.RaiseIfNil(FReceipt, 'Receipt');
+    EYooKassaValidationError.RaiseIfFalse(FReceipt.Items.Count > 0, 'Receipt must have at least one item');
+
+    if FReceiptType = 'refund' then
+      EYooKassaValidationError.RaiseIfFalse((FPaymentId <> '') or (FRefundId <> ''),
+        'For refund receipt, either PaymentId or RefundId must be specified');
+    // receipt type (payment/refund)
+    Result.Add('type', FReceiptType);
+
+    // whether to send the receipt
+    Result.Add('send', FSend);
+
+    // receipt data
+    if Assigned(FReceipt) then
+      FReceipt.AppendJSON(Result);
+
+    // The refund receipt requires a payment_id or a refund_id.
+    if FReceiptType = 'refund' then begin
+      if FPaymentId <> '' then
+        Result.Add('payment_id', FPaymentId)
+      else if FRefundId <> '' then
+        Result.Add('refund_id', FRefundId);
+    end
+    else
+      Result.Add('payment_id', FPaymentId);
+
+    // A list of settlings or payments
+    if Assigned(FSettlements) and (FSettlements.Count > 0) then
+    begin
+      aSettlementsArray := TJSONArray.Create;
+      for aSettlement in FSettlements do
+        aSettlementsArray.Add(aSettlement.ToJSON);
+      Result.Add('settlements', aSettlementsArray);
+    end;
+  except
+    FreeAndNil(Result);
+    raise;
+  end;
 end;
 
 function TYookassaCreateReceiptRequest.GetReceipt: TYookassaReceipt;
@@ -881,34 +895,6 @@ begin
   Result := TYookassaPaymentResponse.Create(ARaw);
 end;
 
-function TYookassaCreatePaymentRequest.BuildRequestJSON: string;
-var
-  aJsonReq: TJSONObject;
-begin
-  EYooKassaValidationError.RaiseIfZeroOrNegative(FAmount, 'Amount');
-  EYooKassaValidationError.RaiseIfEmpty(FCurrency, 'Currency');
-  EYooKassaValidationError.RaiseIfEmpty(FDescription, 'Description');
-  EYooKassaValidationError.RaiseIfEmpty(FReturnUrl, 'ReturnUrl');
-
-  aJsonReq := TJSONObject.Create;
-  try
-    aJsonReq.Add('amount', BuildAmountJSON);
-    aJsonReq.Add('description', FDescription);
-    aJsonReq.Add('confirmation', BuildConfirmationJSON);
-    aJsonReq.Add('capture', True);
-    if FMetaOrderId <> '' then
-      aJsonReq.Add('metadata', BuildMetadataJSON);
-    if Assigned(FReceipt) then
-      aJsonReq.Add('receipt', FReceipt.ToJSON);
-    // receiver (for payout to bank, phone, wallet)
-    if Assigned(FReceiver) then
-      aJsonReq.Add('receiver', FReceiver.ToJSON);  
-    Result := aJsonReq.AsJSON;
-  finally
-    aJsonReq.Free;
-  end;
-end;
-
 function TYookassaCreatePaymentRequest.GetEndpoint: string;
 begin
   Result := FApiBaseUrl + '/payments';
@@ -946,16 +932,36 @@ begin
   inherited Destroy;
 end;
 
+function TYookassaCreatePaymentRequest.ToJSON: TJSONObject;
+begin
+  Result := TJSONObject.Create;
+  try
+    EYooKassaValidationError.RaiseIfZeroOrNegative(FAmount, 'Amount');
+    EYooKassaValidationError.RaiseIfEmpty(FCurrency, 'Currency');
+    EYooKassaValidationError.RaiseIfEmpty(FDescription, 'Description');
+    EYooKassaValidationError.RaiseIfEmpty(FReturnUrl, 'ReturnUrl');
+    Result.Add('amount', BuildAmountJSON);
+    Result.Add('description', FDescription);
+    Result.Add('confirmation', BuildConfirmationJSON);
+    Result.Add('capture', True);
+    if FMetaOrderId <> '' then
+      Result.Add('metadata', BuildMetadataJSON);
+    if Assigned(FReceipt) then
+      Result.Add('receipt', FReceipt.ToJSON);
+    // receiver (for payout to bank, phone, wallet)
+    if Assigned(FReceiver) then
+      Result.Add('receiver', FReceiver.ToJSON);
+  except
+    FreeAndNil(Result);
+    raise;
+  end;
+end;
+
 { TYookassaGetPaymentRequest }
 
 function TYookassaGetPaymentRequest.GetMethod: string;
 begin
   Result := 'GET';
-end;
-
-function TYookassaGetPaymentRequest.BuildRequestJSON: string;
-begin
-  Result := EmptyStr; // The GET request does not have a body
 end;
 
 function TYookassaGetPaymentRequest.GetEndpoint: string;
@@ -967,6 +973,11 @@ end;
 function TYookassaGetPaymentRequest.CreateResponse(aRaw: TJSONObject): TYookassaResponse;
 begin
   Result := TYookassaPaymentResponse.Create(aRaw);
+end;
+
+function TYookassaGetPaymentRequest.ToJSON: TJSONObject;
+begin
+  Result := nil; // The GET request does not have a body
 end;
 
 class function TYookassaGetPaymentRequest.GetPayment(const aShopId, aSecretKey,

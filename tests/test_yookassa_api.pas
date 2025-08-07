@@ -17,6 +17,10 @@ type
     procedure TestToJSON;
   end;
 
+  { TTestableCreateReceiptRequest }
+
+  TTestableCreateReceiptRequest = class(TYookassaCreateReceiptRequest);
+
   { TTestableGetPaymentRequest }
 
   TTestableGetPaymentRequest = class(TYookassaGetPaymentRequest)

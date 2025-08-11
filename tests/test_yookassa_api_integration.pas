@@ -126,7 +126,7 @@ begin
     aItem.AmountValue := aAmount;
     aItem.AmountCurrency := aCurrency;
     aItem.VatCode := 1;
-    aItem.PaymentMode := 'full_prepayment';
+    aItem.PaymentMode := pmFullPrepayment;
     aItem.PaymentSubject := 'property_right';
 
     aItem.Supplier.Name := 'Иванов И.П.';
@@ -263,7 +263,7 @@ begin
   aItem.AmountValue := FPaymentRequest.Amount;
   aItem.AmountCurrency := FPaymentRequest.Currency;
   aItem.VatCode := 1;
-  aItem.PaymentMode := 'full_prepayment';
+  aItem.PaymentMode := pmFullPrepayment;
   aItem.PaymentSubject := 'commodity';
   aReceipt.AddItem(aItem);
 
@@ -356,7 +356,7 @@ begin
   aItem.AmountValue := 200.00;
   aItem.AmountCurrency := 'RUB';
   aItem.VatCode := 2; // НДС 10%
-  aItem.PaymentMode := 'full_prepayment';
+  aItem.PaymentMode := pmFullPrepayment;
   aItem.PaymentSubject := 'commodity';
   aItem.MarkMode := 1; // The product is subject to labeling
   aItem.MarkCodeInfo := 'VGVzdE1hcmtDb2RlMTIzNDU2Nzg5MA=='; // Base64 test code
@@ -407,7 +407,7 @@ begin
       aItem.AmountValue := FPaymentRequest.Amount;
       aItem.AmountCurrency := FPaymentRequest.Currency;
       aItem.VatCode := 1; // НДС 18%
-      aItem.PaymentMode := 'full_prepayment';
+      aItem.PaymentMode := pmFullPrepayment;
       aItem.PaymentSubject := 'commodity';
 
       // supplier

@@ -109,10 +109,18 @@ type
     atAgent                 // agent
   );
 
+  { Признак способа расчета передается в параметре payment_mode }
+  TPaymentMode = (
+    pmNone,
+    pmFullPrepayment,   // Полная предоплата
+    pmFullPayment       // Полный расчет
+  );
+
   { TYookassaReceiptItem }
   TYookassaReceiptItem = class(TYookassaAPIObject)
   private
     FAgentType: TYookassaAgentType;
+    FPaymentMode: TPaymentMode;
     FSupplier: TYookassaSupplier;
     function GetAgentTypeString: string;
     function GetSupplier: TYookassaSupplier;
@@ -122,7 +130,6 @@ type
     AmountValue: Currency;
     AmountCurrency: string;
     VatCode: Integer;
-    PaymentMode: string;
     PaymentSubject: string;
     MarkMode: Integer;
     MarkCodeInfo: string; // base64 gs_1m,
@@ -130,7 +137,8 @@ type
     constructor Create;
     destructor Destroy; override;
     function ToJSON: TJSONObject; override;
-    property AgentType: TYookassaAgentType read FAgentType write FAgentType;
+    property AgentType: TYookassaAgentType read FAgentType write FAgentType; 
+    property PaymentMode: TPaymentMode read FPaymentMode write FPaymentMode;
     property Supplier: TYookassaSupplier read GetSupplier;
   end;
 
@@ -305,6 +313,16 @@ begin
   case aType of
     rtPayment: Result:='payment';
     rtRefund:  Result:='refund';
+  else
+    Result:=EmptyStr;
+  end;
+end;
+
+function PaymentModeToString(aPaymentMode: TPaymentMode): String;
+begin
+  case aPaymentMode of
+    pmFullPrepayment: Result:='full_prepayment';
+    pmFullPayment:    Result:='full_payment';
   else
     Result:=EmptyStr;
   end;
@@ -574,7 +592,7 @@ begin
     aAmount.Add('currency', AmountCurrency);
     Result.Add('amount', aAmount);
     Result.Add('vat_code', VatCode);
-    if PaymentMode <> EmptyStr then Result.Add('payment_mode', PaymentMode);
+    if FPaymentMode <> pmNone then Result.Add('payment_mode', PaymentModeToString(FPaymentMode));
     if PaymentSubject <> EmptyStr then Result.Add('payment_subject', PaymentSubject);
     if MarkMode >= 0 then
     begin

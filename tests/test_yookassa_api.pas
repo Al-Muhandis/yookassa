@@ -314,7 +314,7 @@ begin
     aItem.AmountValue := 150.00;
     aItem.AmountCurrency := 'RUB';
     aItem.VatCode := 1;
-    aItem.PaymentMode := 'full_prepayment';
+    aItem.PaymentMode := pmFullPrepayment;
     aItem.PaymentSubject := 'commodity';
     aItem.Measure := 'piece';
 

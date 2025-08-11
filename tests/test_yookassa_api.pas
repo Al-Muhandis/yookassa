@@ -114,7 +114,7 @@ end;
 
 procedure TTestYooKassa.FillPaymentData(aPayment: TYookassaCreatePaymentRequest);
 begin
-  aPayment.Amount := 123.45;
+  aPayment.Amount := 123000.45;
   aPayment.Currency := 'RUB';
   aPayment.Description := 'Test payment';
   aPayment.ReturnUrl:='https://sample.com/';
@@ -128,7 +128,7 @@ end;
 
 procedure TTestYooKassa.CreatePaymentStaticHandler;
 begin
-  TYookassaCreatePaymentRequest.CreatePayment('', '', 100, 'RUB', 'Test', 'https://return');
+  TYookassaCreatePaymentRequest.CreatePayment('', '', 100000, 'RUB', 'Test', 'https://return');
 end;
 
 class procedure TTestYooKassa.AddProductToReceipt(aReceipt: TYookassaReceipt; const aProductDescription: String;
@@ -142,7 +142,7 @@ begin
   aItem := TYookassaReceiptItem.Create;
   aItem.Description := aProductDescription;
   aItem.Quantity := 1;
-  aItem.AmountValue := 100.00;
+  aItem.AmountValue := 1000000.00;
   aItem.AmountCurrency := 'RUB';
   aItem.VatCode := aVatCode;
   aReceipt.AddItem(aItem);
@@ -175,7 +175,7 @@ begin
     o.Free;
   end;
   AssertTrue(Pos('"amount"', aJSON) > 0);
-  AssertTrue(Pos('"value" : "123.45"', aJSON) > 0);
+  AssertTrue(Pos('"value" : "123000.45"', aJSON) > 0);
 end;
 
 procedure TTestYooKassa.TestCreatePaymentStatic;
@@ -429,7 +429,7 @@ var
 begin
   AddProductToReceipt(FReceiptRequest.Receipt, 'Тестовый товар', 1);
 
-  FReceiptRequest.ReceiptType := 'payment';
+  FReceiptRequest.ReceiptType := rtPayment;
   FReceiptRequest.Send := True;
 
   aJSON := FReceiptRequest.ToJSON;
@@ -447,7 +447,7 @@ var
 begin
   AddProductToReceipt(FReceiptRequest.Receipt, 'Возврат товара', 2);
 
-  FReceiptRequest.ReceiptType := 'refund';
+  FReceiptRequest.ReceiptType := rtRefund;
   FReceiptRequest.PaymentId := 'payment_123456';
   FReceiptRequest.Send := False;
 
@@ -467,12 +467,12 @@ begin
 
   FReceiptRequest.ShopId := 'test_shop_id';
   FReceiptRequest.SecretKey := 'test_secret_key';
-  FReceiptRequest.ReceiptType := 'payment';
+  FReceiptRequest.ReceiptType := rtPayment;
   FReceiptRequest.Send := True;
 
   AssertEquals('test_shop_id', FReceiptRequest.ShopId);
   AssertEquals('test_secret_key', FReceiptRequest.SecretKey);
-  AssertEquals('payment', FReceiptRequest.ReceiptType);
+  AssertEquals(Ord(rtPayment), Ord(FReceiptRequest.ReceiptType));
   AssertEquals(True, FReceiptRequest.Send);
   AssertTrue(Assigned(FReceiptRequest.Receipt));
 end;

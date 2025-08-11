@@ -77,7 +77,7 @@ type
     property OnLog: TYookassaLogEvent read FOnLog write FOnLog;
     property ShopId: string read FShopId write FShopId;
     property SecretKey: string read FSecretKey write FSecretKey;
-    constructor Create; virtual;
+    constructor Create; overload; virtual;
     function Execute: TYookassaResponse;
   end;
 
@@ -172,11 +172,17 @@ type
 
   TSettlementsList = specialize TFPGObjectList<TYookassaSettlement>;
 
+  TReceiptType = (
+    rtNone,     // Неопределен
+    rtPayment,  // Приход
+    rtRefund    // Возврат прихода
+  );
+
   { TYookassaCreateReceiptRequest }
   TYookassaCreateReceiptRequest = class(TYookassaRequest)
   private
-    FReceiptType: string;
     FPaymentId: string;
+    FReceiptType: TReceiptType;
     FRefundId: string;
     FReceipt: TYookassaReceipt;
     FSend: Boolean;
@@ -191,14 +197,14 @@ type
     constructor Create; override;
     destructor Destroy; override;
     function ToJSON: TJSONObject; override;
-    property ReceiptType: string read FReceiptType write FReceiptType;
+    property ReceiptType: TReceiptType read FReceiptType write FReceiptType;
     property PaymentId: string read FPaymentId write FPaymentId;
     property RefundId: string read FRefundId write FRefundId;
     property Receipt: TYookassaReceipt read GetReceipt write FReceipt;
     property Send: Boolean read FSend write FSend;
     property Settlements: TSettlementsList read GetSettlements;
-    class function CreateReceipt(const aShopId, aSecretKey: string; aReceipt: TYookassaReceipt;
-      const aReceiptType: string; const aPaymentId: string; aSend: Boolean): TYookassaReceiptResponse;
+    class function CreateReceipt(const aShopId, aSecretKey: string; aReceipt: TYookassaReceipt; aReceiptType: TReceiptType;
+      const aPaymentId: string; aSend: Boolean): TYookassaReceiptResponse;
   end;
 
   { TYookassaReceiverType }
@@ -244,7 +250,7 @@ type
     destructor Destroy; override;
     function ToJSON: TJSONObject; override;
     property Amount: Currency read FAmount write FAmount;
-    property Currency: string read FCurrency write FCurrency;
+    property &Currency: string read FCurrency write FCurrency;
     property Description: string read FDescription write FDescription;
     property Receiver: TYookassaReceiver read GetReceiver;
     property ReturnUrl: string read FReturnUrl write FReturnUrl;
@@ -291,6 +297,16 @@ begin
   except
     on E: Exception do
       Exit(False);
+  end;
+end;
+
+function ReceiptTypeToString(aType: TReceiptType): String;
+begin
+  case aType of
+    rtPayment: Result:='payment';
+    rtRefund:  Result:='refund';
+  else
+    Result:=EmptyStr;
   end;
 end;
 
@@ -512,13 +528,13 @@ end;
 function TYookassaReceiptItem.GetAgentTypeString: string;
 begin
   case FAgentType of
-    atBankingPaymentAgent:   Result := 'banking_payment_agent';
+    atBankingPaymentAgent:    Result := 'banking_payment_agent';
     atBankingPaymentSubagent: Result := 'banking_payment_subagent';
-    atPaymentAgent:          Result := 'payment_agent';
-    atPaymentSubagent:       Result := 'payment_subagent';
-    atAttorney:              Result := 'attorney';
-    atCommissioner:          Result := 'commissioner';
-    atAgent:                 Result := 'agent';
+    atPaymentAgent:           Result := 'payment_agent';
+    atPaymentSubagent:        Result := 'payment_subagent';
+    atAttorney:               Result := 'attorney';
+    atCommissioner:           Result := 'commissioner';
+    atAgent:                  Result := 'agent';
   else
     Result := EmptyStr;
   end;
@@ -714,7 +730,7 @@ constructor TYookassaCreateReceiptRequest.Create;
 begin
   inherited Create;
   FSend := True; // by default, we send the receipt to the client
-  FReceiptType := 'payment'; // by default, the payment receipt
+  FReceiptType := rtPayment; // by default, the payment receipt
 end;
 
 destructor TYookassaCreateReceiptRequest.Destroy;
@@ -734,11 +750,11 @@ begin
     EYooKassaValidationError.RaiseIfNil(FReceipt, 'Receipt');
     EYooKassaValidationError.RaiseIfFalse(FReceipt.Items.Count > 0, 'Receipt must have at least one item');
 
-    if FReceiptType = 'refund' then
+    if FReceiptType = rtRefund then
       EYooKassaValidationError.RaiseIfFalse((FPaymentId <> EmptyStr) or (FRefundId <> EmptyStr),
         'For refund receipt, either PaymentId or RefundId must be specified');
     // receipt type (payment/refund)
-    Result.Add('type', FReceiptType);
+    Result.Add('type', ReceiptTypeToString(FReceiptType));
 
     // whether to send the receipt
     Result.Add('send', FSend);
@@ -748,7 +764,7 @@ begin
       FReceipt.AppendJSON(Result);
 
     // The refund receipt requires a payment_id or a refund_id.
-    if FReceiptType = 'refund' then begin
+    if FReceiptType = rtRefund then begin
       if FPaymentId <> EmptyStr then
         Result.Add('payment_id', FPaymentId)
       else if FRefundId <> EmptyStr then
@@ -786,7 +802,7 @@ begin
 end;
 
 class function TYookassaCreateReceiptRequest.CreateReceipt(const aShopId, aSecretKey: string;
-  aReceipt: TYookassaReceipt; const aReceiptType: string; const aPaymentId: string;
+  aReceipt: TYookassaReceipt; aReceiptType: TReceiptType; const aPaymentId: string;
   aSend: Boolean): TYookassaReceiptResponse;
 var
   aReceiptReq: TYookassaCreateReceiptRequest;

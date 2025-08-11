@@ -277,7 +277,7 @@ procedure TTestYooKassaIntegration.TestCreateReceipt_Sandbox;
 begin
   LoadCreateReceiptConf(FReceiptRequest);
   UpdateTestReceipt(FReceiptRequest.Receipt, 'Товар', 50.00, 'RUB');
-  FReceiptRequest.ReceiptType := 'payment';
+  FReceiptRequest.ReceiptType := rtPayment;
   FReceiptRequest.Settlements.Add(TYookassaSettlement.Create('prepayment', 50, 'RUB'));
 
   FReceiptResp := FReceiptRequest.Execute as TYookassaReceiptResponse;
@@ -293,7 +293,7 @@ begin
   UpdateTestReceipt(FReceiptRequest.Receipt, 'Товар', 75.50, 'RUB');
   FReceiptRequest.Receipt.CustomerPhone := '+79001234567';
 
-  FReceiptRequest.ReceiptType := 'payment';
+  FReceiptRequest.ReceiptType := rtPayment;
   FReceiptRequest.Send := True;
 
   FReceiptResp := FReceiptRequest.Execute as TYookassaReceiptResponse;
@@ -307,7 +307,7 @@ begin
   UpdateTestReceipt(FReceiptRequest.Receipt, 'Товар', 120.00, 'RUB');
   FReceiptRequest.Receipt.TaxSystemCode := 1; // УСН income
 
-  FReceiptRequest.ReceiptType := 'payment';
+  FReceiptRequest.ReceiptType := rtPayment;
 
   FReceiptResp := FReceiptRequest.Execute as TYookassaReceiptResponse;
 
@@ -331,7 +331,7 @@ begin
 
   // Create refund receipt now
   LoadCreateReceiptConf(FReceiptRequest);
-  FReceiptRequest.ReceiptType := 'refund';
+  FReceiptRequest.ReceiptType := rtRefund;
   FReceiptRequest.PaymentId := aPaymentId;
   FReceiptRequest.Send := False; // Do not send refund receipt to client
 
@@ -362,7 +362,7 @@ begin
   aItem.MarkCodeInfo := 'VGVzdE1hcmtDb2RlMTIzNDU2Nzg5MA=='; // Base64 test code
   FReceiptRequest.Receipt.AddItem(aItem);
 
-  FReceiptRequest.ReceiptType := 'payment';
+  FReceiptRequest.ReceiptType := rtPayment;
 
   FReceiptResp := FReceiptRequest.Execute as TYookassaReceiptResponse;
 
@@ -396,7 +396,7 @@ begin
     LoadCreateReceiptConf(aReceiptReq);
     aReceiptReq.Receipt.CustomerEmail := 'agent-client@example.com';
     aReceiptReq.PaymentId := aPaymentID; // required field
-    aReceiptReq.ReceiptType := 'payment';
+    aReceiptReq.ReceiptType := rtPayment;
     aReceiptReq.Send := True;
 
     // Adding a product with a supplier

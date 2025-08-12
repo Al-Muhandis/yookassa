@@ -118,7 +118,7 @@ var
 begin
   aIni := TIniFile.Create(ExtractFilePath(ParamStr(0)) + 'config.ini');
   try
-    TestReceipt.CustomerEmail := aIni.ReadString('receipt', 'customer.email', 'test-receipt@example.com');
+    TestReceipt.Customer.Email := aIni.ReadString('receipt', 'customer.email', 'test-receipt@example.com');
 
     aItem := TYookassaReceiptItem.Create;
     aItem.Description := aDescription;
@@ -238,7 +238,7 @@ begin
     end;
   until aSucceeded;
   LoadCreateReceiptConf(FReceiptRequest);
-  FReceiptRequest.Settlements.Add(TYookassaSettlement.Create('prepayment', FPaymentRequest.Amount,
+  FReceiptRequest.Settlements.Add(TYookassaSettlement.Create(stPrepayment, FPaymentRequest.Amount,
     FPaymentRequest.Currency));
   UpdateTestReceipt(FReceiptRequest.Receipt, FPaymentRequest.Description, FPaymentRequest.Amount,
     FPaymentRequest.Currency);
@@ -255,7 +255,7 @@ var
 begin
   LoadCreatePaymentConf(FPaymentRequest);
   aReceipt := TYookassaReceipt.Create;
-  aReceipt.CustomerEmail := 'user@example.com';
+  aReceipt.Customer.Email := 'user@example.com';
 
   aItem := TYookassaReceiptItem.Create;
   aItem.Description := 'Тестовый товар';
@@ -278,7 +278,7 @@ begin
   LoadCreateReceiptConf(FReceiptRequest);
   UpdateTestReceipt(FReceiptRequest.Receipt, 'Товар', 50.00, 'RUB');
   FReceiptRequest.ReceiptType := rtPayment;
-  FReceiptRequest.Settlements.Add(TYookassaSettlement.Create('prepayment', 50, 'RUB'));
+  FReceiptRequest.Settlements.Add(TYookassaSettlement.Create(stPrepayment, 50, 'RUB'));
 
   FReceiptResp := FReceiptRequest.Execute as TYookassaReceiptResponse;
 
@@ -291,7 +291,7 @@ procedure TTestYooKassaIntegration.TestCreateReceiptWithPhone_Sandbox;
 begin
   LoadCreateReceiptConf(FReceiptRequest);
   UpdateTestReceipt(FReceiptRequest.Receipt, 'Товар', 75.50, 'RUB');
-  FReceiptRequest.Receipt.CustomerPhone := '+79001234567';
+  FReceiptRequest.Receipt.Customer.Phone := '+79001234567';
 
   FReceiptRequest.ReceiptType := rtPayment;
   FReceiptRequest.Send := True;
@@ -347,7 +347,7 @@ var
 begin
   LoadCreateReceiptConf(FReceiptRequest);
 
-  FReceiptRequest.Receipt.CustomerEmail := 'markcode-test@example.com';
+  FReceiptRequest.Receipt.Customer.Email := 'markcode-test@example.com';
 
   // Creating a labeled product
   aItem := TYookassaReceiptItem.Create;
@@ -394,7 +394,7 @@ begin
   aReceiptReq := TYookassaCreateReceiptRequest.Create;
   try
     LoadCreateReceiptConf(aReceiptReq);
-    aReceiptReq.Receipt.CustomerEmail := 'agent-client@example.com';
+    aReceiptReq.Receipt.Customer.Email := 'agent-client@example.com';
     aReceiptReq.PaymentId := aPaymentID; // required field
     aReceiptReq.ReceiptType := rtPayment;
     aReceiptReq.Send := True;

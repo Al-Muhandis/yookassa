@@ -136,7 +136,7 @@ class procedure TTestYooKassa.AddProductToReceipt(aReceipt: TYookassaReceipt; co
 var
   aItem: TYookassaReceiptItem;
 begin
-  aReceipt.CustomerEmail := 'test@example.com';
+  aReceipt.Customer.Email := 'test@example.com';
   aReceipt.TaxSystemCode:=aTaxSystemCode;
 
   aItem := TYookassaReceiptItem.Create;
@@ -344,7 +344,7 @@ var
 begin
   aReceipt := TYookassaReceipt.Create;
   try
-    aReceipt.CustomerEmail := 'user@example.com';
+    aReceipt.Customer.Email := 'user@example.com';
     aItem := TYookassaReceiptItem.Create;
     aItem.Description := 'Позиция 1';
     aItem.Quantity := 1;
@@ -378,8 +378,8 @@ var
 begin
   aReceipt := TYookassaReceipt.Create;
   try
-    aReceipt.CustomerEmail := 'user@example.com';
-    aReceipt.CustomerPhone := '+79001234567';
+    aReceipt.Customer.Email := 'user@example.com';
+    aReceipt.Customer.Phone := '+79001234567';
 
     aItem := TYookassaReceiptItem.Create;
     aItem.Description := 'Товар с телефоном';
@@ -623,10 +623,10 @@ begin
   aReceiptReq := TTestableCreateReceiptRequest.Create;
   try
     // add two calculations
-    aSettlement := TYookassaSettlement.Create('cash', 500.00, 'RUB');
+    aSettlement := TYookassaSettlement.Create(stCashless, 500.00, 'RUB');
     aReceiptReq.Settlements.Add(aSettlement);
 
-    aSettlement := TYookassaSettlement.Create('bank_card', 1500.00, 'RUB');
+    aSettlement := TYookassaSettlement.Create(stPrepayment, 1500.00, 'RUB');
     aReceiptReq.Settlements.Add(aSettlement);
 
     AddProductToReceipt(aReceiptReq.Receipt, 'Некий продукт');
@@ -638,11 +638,11 @@ begin
       AssertEquals(2, aSettlementsArray.Count);
 
       aSettlementJSON := aSettlementsArray.Objects[0];
-      AssertEquals('cash', aSettlementJSON.Get('type', ''));
+      AssertEquals('cashless', aSettlementJSON.Get('type', ''));
       AssertEquals('500.00', aSettlementJSON.Objects['amount'].Get('value', ''));
 
       aSettlementJSON := aSettlementsArray.Objects[1];
-      AssertEquals('bank_card', aSettlementJSON.Get('type', ''));
+      AssertEquals('prepayment', aSettlementJSON.Get('type', ''));
       AssertEquals('1500.00', aSettlementJSON.Objects['amount'].Get('value', ''));
       AssertEquals('RUB', aSettlementJSON.Objects['amount'].Get('currency', ''));
     finally

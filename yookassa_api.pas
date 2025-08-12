@@ -27,12 +27,14 @@ type
   TYookassaPaymentResponse = class(TYookassaResponse) 
   private
     function GetConfirmationURL: string;
-    function GetAmount: Currency;   
+    function GetAmount: Currency;
+    function GetCurrency: String;
     function GetId: string; override; 
     function GetStatus: string; override;
   public
     property ConfirmationURL: string read GetConfirmationURL;
     property Amount: Currency read GetAmount;
+    property Currency: String read GetCurrency;
     property ID: String read GetId;
     property Status: String read GetStatus;
   end;
@@ -144,36 +146,67 @@ type
 
   TReceiptItems = specialize TFPGObjectList<TYookassaReceiptItem>;
 
+  { TYookassaUser }
+
+  TYookassaUser = class(TYookassaAPIObject)
+  private
+    FEmail: String;
+    FFullName: String;
+    FINN: String;
+    FPhone: String;
+  public
+    function ToJSON: TJSONObject; override;
+{ Для юрлица — название организации, для ИП и физического лица — ФИО. Если у физлица отсутствует ИНН,
+  в этом же параметре передаются паспортные данные. Не более 256 символов. }
+    property FullName: String read FFullName write FFullName;
+{ ИНН пользователя (10 или 12 цифр).
+  Если у физического лица отсутствует ИНН, необходимо передать паспортные данные в параметре full_name }
+    property INN: String read FINN write FINN;
+{ Электронная почта пользователя для отправки чека. Обязательный параметр, если используете Чеки от ЮKassa
+  или если используете другое решение (стороннюю онлайн-кассу, чеки самозанятых) и не передаете phone. }
+    property Email: String read FEmail write FEmail;
+{ Телефон пользователя для отправки чека. Указывается в формате ITU-T E.164, например 79000000000.
+  Обязательный параметр, если не передан email }
+    property Phone: String read FPhone write FPhone;
+  end;
+
   { TYookassaReceipt }
   TYookassaReceipt = class(TYookassaAPIObject)
   private
-    FCustomerEmail: string;
-    FCustomerPhone: string;
+    FCustomer: TYookassaUser;
     FItems: TReceiptItems;
     FTaxSystemCode: Integer;
+    function GetCustomer: TYookassaUser;
   public
     constructor Create;
     destructor Destroy; override;
     procedure AddItem(aItem: TYookassaReceiptItem);
     function ToJSON: TJSONObject;  override;
     procedure AppendJSON(aJSON: TJSONObject);
-    property CustomerEmail: String read FCustomerEmail write FCustomerEmail;
-    property CustomerPhone: String read FCustomerPhone write FCustomerPhone;
+    property Customer: TYookassaUser read GetCustomer write FCustomer;
     property Items: TReceiptItems read FItems write FItems;
     property TaxSystemCode: Integer read FTaxSystemCode write FTaxSystemCode;
   end;
 
+  TSettlementType = (
+    stNone,             // Не указан
+    stCashless,         // Безналичный расчет
+    stPrepayment,       //  Предоплата (аванс)
+    stPostpayment,      // Постоплата (кредит)
+    stConsideration     // Встречное предоставление
+    );
+
   { TYookassaSettlement }
   TYookassaSettlement = class(TYookassaAPIObject)
   private
-    FType: string;     // 'cash' or 'bank_card'
+    FType: TSettlementType;
     FAmountValue: Currency;
     FAmountCurrency: string;
   public
     constructor Create; overload;
-    constructor Create(const aType: string; aAmount: Currency; const aCurrency: string); overload;
+    constructor Create(aType: TSettlementType; aAmount: Currency; const aCurrency: string); overload;
     function ToJSON: TJSONObject; override;
-    property SettlementType: string read FType write FType;
+    property SettlementType: TSettlementType read FType write FType;
     property Amount: Currency read FAmountValue write FAmountValue;
     property Currency: string read FAmountCurrency write FAmountCurrency;
   end;
@@ -328,6 +361,18 @@ begin
   end;
 end;
 
+function SettlementTypeToString(aSettlementType: TSettlementType): String;
+begin
+  case aSettlementType of
+    stCashless:      Result:='cashless';
+    stPrepayment:    Result:='prepayment';
+    stPostpayment:   Result:='postpayment';
+    stConsideration: Result:='consideration';
+  else
+    Result:=EmptyStr;
+  end;
+end;
+
 { TYookassaResponse }
 
 constructor TYookassaResponse.Create(ARaw: TJSONObject);
@@ -363,12 +408,17 @@ end;
 
 function TYookassaPaymentResponse.GetAmount: Currency;
 var
-  ValueStr: string;
+  aValueStr: string;
 begin
   Result := 0;
-  ValueStr := Raw.FindPath('amount.value').AsString;
-  if not ValueStr.IsEmpty then
-    Result := StrToCurr(ValueStr, _FrmtStngsJSON);
+  aValueStr := Raw.FindPath('amount.value').AsString;
+  if not aValueStr.IsEmpty then
+    Result := StrToCurr(aValueStr, _FrmtStngsJSON);
+end;
+
+function TYookassaPaymentResponse.GetCurrency: String;
+begin
+  Result := Raw.FindPath('amount.currency').AsString;
 end;
 
 { TYookassaReceiptResponse }
@@ -638,7 +688,34 @@ begin
   end;
 end;
 
+{ TYookassaUser }
+
+function TYookassaUser.ToJSON: TJSONObject;
+begin
+  Result := TJSONObject.Create;
+  try
+    if not FFullName.IsEmpty then
+      Result.Add('full_name', FFullName);
+    if not FINN.IsEmpty then
+      Result.Add('inn', FINN);
+    if not FEmail.IsEmpty then
+      Result.Add('email', FEmail);
+    if not FPhone.IsEmpty then
+      Result.Add('phone', FPhone);
+  except
+    FreeAndNil(Result);
+    raise;
+  end;
+end;
+
 { TYookassaReceipt }
+
+function TYookassaReceipt.GetCustomer: TYookassaUser;
+begin
+  if not Assigned(FCustomer) then
+    FCustomer:=TYookassaUser.Create;
+  Result:=FCustomer;
+end;
 
 constructor TYookassaReceipt.Create;
 begin
@@ -648,6 +725,7 @@ end;
 
 destructor TYookassaReceipt.Destroy;
 begin
+  FCustomer.Free;
   FItems.Free;
   inherited Destroy;
 end;
@@ -674,13 +752,9 @@ var
   aCustomer: TJSONObject;
   Item: TYookassaReceiptItem;
 begin
-  // customer
-  if (CustomerEmail <> EmptyStr) or (CustomerPhone <> EmptyStr) then begin
-    aCustomer := TJSONObject.Create;
-    if CustomerEmail <> EmptyStr then aCustomer.Add('email', CustomerEmail);
-    if CustomerPhone <> EmptyStr then aCustomer.Add('phone', CustomerPhone);
-    aJson.Add('customer', aCustomer);
-  end;
+  if Assigned(FCustomer) then
+    if (FCustomer.Email <> EmptyStr) or (FCustomer.Phone <> EmptyStr) then
+      aJSON.Add('customer', FCustomer.ToJSON);
 
   // items
   aItems := TJSONArray.Create;
@@ -700,7 +774,7 @@ begin
   FAmountCurrency := 'RUB';
 end;
 
-constructor TYookassaSettlement.Create(const aType: string; aAmount: Currency; const aCurrency: string);
+constructor TYookassaSettlement.Create(aType: TSettlementType; aAmount: Currency; const aCurrency: string);
 begin
   Create;
   FType := aType;
@@ -714,8 +788,8 @@ var
 begin
   Result := TJSONObject.Create;
   try
-    if FType <> EmptyStr then
-      Result.Add('type', FType);
+    if FType <> stNone then
+      Result.Add('type', SettlementTypeToString(FType));
 
     aAmount := TJSONObject.Create;
     aAmount.Add('value', Format('%.2f', [FAmountValue], _FrmtStngsJSON));

@@ -215,7 +215,6 @@ procedure TTestYooKassaIntegration.TestCreatePaymentThenCreateReceiptAfterSucces
 var
   aConfirmationURL, aPaymentID: String;
   aPaymentResp: TYookassaPaymentResponse;
-  aSucceeded: Boolean;
 begin
   LoadCreatePaymentConf(FPaymentRequest);
   FPaymentResp:=FPaymentRequest.Execute as TYookassaPaymentResponse;
@@ -227,16 +226,11 @@ begin
 { Just pay using the link aConfirmationURL (you can view it in the file "~payment_response.json")
     within a minute (while the program is on Sleep(60*1000)) }
   JSONToFile('~payment_response.json', FPaymentResp.Raw);
-  aSucceeded:=False;
   repeat
     Sleep(10*1000); // 10 seconds
     aPaymentResp:=TYookassaGetPaymentRequest.GetPayment(FPaymentRequest.ShopId, FPaymentRequest.SecretKey, aPaymentID);
-    try
-      aSucceeded:=aPaymentResp.Status='succeeded';
-    finally
-      aPaymentResp.Free;
-    end;
-  until aSucceeded;
+    aPaymentResp.Free;
+  until aPaymentResp.Status=psSucceeded;
   LoadCreateReceiptConf(FReceiptRequest);
   FReceiptRequest.Settlements.Add(TYookassaSettlement.Create(stPrepayment, FPaymentRequest.Amount,
     FPaymentRequest.Currency));
@@ -422,7 +416,7 @@ begin
 
       // check response
       AssertTrue('Receipt must be created', FReceiptResp.ID <> '');
-      AssertEquals('succeeded', FReceiptResp.GetStatus);
+      AssertEquals('succeeded', FReceiptResp.Status);
       AssertEquals(aPaymentId, FReceiptResp.PaymentId);
 
       // check that supplier was sent

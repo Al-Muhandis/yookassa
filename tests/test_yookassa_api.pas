@@ -218,7 +218,7 @@ begin
       aResp := aReq.CreateResponse(aRaw) as TYookassaPaymentResponse;
       try
         AssertEquals('pay_123', aResp.ID);
-        AssertEquals('succeeded', aResp.Status);
+        AssertEquals(Ord(psSucceeded), Ord(aResp.Status));
         AssertEquals(100.00, (aResp).Amount);
       finally
         aResp.Free;
@@ -254,7 +254,7 @@ begin
     aResp := TTestableGetPaymentRequest.GetPayment('test_shop', 'test_key', 'pay_test_999');
     try
       AssertEquals('pay_test_999', aResp.ID);
-      AssertEquals('waiting_for_capture', aResp.Status);
+      AssertEquals(Ord(psWaitingForCapture), Ord(aResp.Status));
       AssertEquals(500.00, aResp.Amount);
       AssertEquals('https://yookassa.ru/checkout/pay/test', aResp.ConfirmationURL);
     finally
@@ -291,7 +291,7 @@ begin
     aResp := TYookassaPaymentResponse.Create(aRaw);
     try
       AssertEquals('pay_123', aResp.ID);
-      AssertEquals('pending', aResp.Status);
+      AssertEquals(Ord(psPending), Ord(aResp.Status));
       AssertEquals('https://yookassa.ru/checkout/pay/abc', aResp.ConfirmationURL);
       AssertEquals(100.00, aResp.Amount);
     finally
@@ -491,7 +491,7 @@ begin
     aResp := TYookassaReceiptResponse.Create(aRaw);
     try
       AssertEquals('rcpt_456', aResp.ID);
-      AssertEquals('succeeded', aResp.GetStatus);
+      AssertEquals('succeeded', aResp.Status);
       AssertEquals('pay_789', aResp.PaymentId);
     finally
       aResp.Free;

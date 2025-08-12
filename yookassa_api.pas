@@ -16,12 +16,20 @@ type
   private
     FRaw: TJSONObject;                  
     function GetId: string; virtual; abstract;
-    function GetStatus: string; virtual; abstract;
   public
     constructor Create(ARaw: TJSONObject);
     destructor Destroy; override;
     property Raw: TJSONObject read FRaw;
   end;
+
+  TPaymentStatus = (
+    psNone,              // Не указан  
+    psUnknown,           // Не распознан (нет в этом списке статусов)
+    psPending,           // Платеж создан и ожидает действий от пользователя
+    psWaitingForCapture, // Платеж оплачен, деньги авторизованы и ожидают списания
+    psSucceeded,         // Платеж успешно завершен
+    psCanceled           // Платеж отменен
+    );
 
   { TYookassaPaymentResponse }
   TYookassaPaymentResponse = class(TYookassaResponse) 
@@ -29,14 +37,14 @@ type
     function GetConfirmationURL: string;
     function GetAmount: Currency;
     function GetCurrency: String;
-    function GetId: string; override; 
-    function GetStatus: string; override;
+    function GetId: string; override;
+    function GetStatus: TPaymentStatus;
   public
     property ConfirmationURL: string read GetConfirmationURL;
     property Amount: Currency read GetAmount;
     property Currency: String read GetCurrency;
     property ID: String read GetId;
-    property Status: String read GetStatus;
+    property Status: TPaymentStatus read GetStatus;
   end;
 
   { TYookassaReceiptResponse }
@@ -44,9 +52,10 @@ type
   private
     function GetPaymentId: String;   
     function GetId: string; override;
+    function GetStatus: string;
   public
-    function GetStatus: string; override;
     property PaymentId: string read GetPaymentId;
+    property Status: String read GetStatus;
     property ID: String read GetId;
   end;
 
@@ -373,6 +382,19 @@ begin
   end;
 end;
 
+function StringToPaymentStatus(const aPaymentStatus: String): TPaymentStatus;
+begin
+  case aPaymentStatus of
+    '':                    Result:=psNone;
+    'pending':             Result:=psPending;
+    'waiting_for_capture': Result:=psWaitingForCapture;
+    'succeeded':           Result:=psSucceeded;
+    'canceled':            Result:=psCanceled;
+  else
+    Result:=psUnknown;
+  end;
+end;
+
 { TYookassaResponse }
 
 constructor TYookassaResponse.Create(ARaw: TJSONObject);
@@ -393,9 +415,9 @@ begin
   Result := Raw.Get('id', EmptyStr);
 end;
 
-function TYookassaPaymentResponse.GetStatus: string;
+function TYookassaPaymentResponse.GetStatus: TPaymentStatus;
 begin
-  Result := Raw.Get('status', EmptyStr);
+  Result := StringToPaymentStatus(Raw.Get('status', EmptyStr));
 end;
 
 function TYookassaPaymentResponse.GetConfirmationURL: string;
@@ -749,7 +771,6 @@ end;
 procedure TYookassaReceipt.AppendJSON(aJSON: TJSONObject);
 var
   aItems: TJSONArray;
-  aCustomer: TJSONObject;
   Item: TYookassaReceiptItem;
 begin
   if Assigned(FCustomer) then

@@ -46,7 +46,7 @@ uses
 procedure TTestYookassaWebhook.SetUp;
 begin
   inherited SetUp;
-  FHandler := TYookassaWebhookHandler.Create('test_secret');
+  FHandler := TYookassaWebhookHandler.Create;
   FHandler.OnLog := @LogHandler;
   FLogMsg := '';
   FLogEventType := etDebug;

@@ -39,7 +39,6 @@ type
   { TYookassaWebhookHandler }
   TYookassaWebhookHandler = class
   private
-    FSecretKey: string;
     FOnPaymentSucceeded: TYookassaWebhookEvent;
     FOnPaymentWaitingForCapture: TYookassaWebhookEvent;
     FOnPaymentCanceled: TYookassaWebhookEvent;
@@ -50,9 +49,6 @@ type
     // Main method. Call this from any web server implementation.
     // Takes the raw request body and returns a JSON response string.
     function HandleWebhook(const aRawBody: string): string;
-
-    // Properties
-    property SecretKey: string read FSecretKey write FSecretKey;
     property OnPaymentSucceeded: TYookassaWebhookEvent read FOnPaymentSucceeded write FOnPaymentSucceeded;
     property OnPaymentWaitingForCapture: TYookassaWebhookEvent read FOnPaymentWaitingForCapture write FOnPaymentWaitingForCapture;
     property OnPaymentCanceled: TYookassaWebhookEvent read FOnPaymentCanceled write FOnPaymentCanceled;

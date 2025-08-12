@@ -324,6 +324,8 @@ type
     class function GetPayment(const aShopId, aSecretKey, aPaymentId: string): TYookassaPaymentResponse;
   end;
 
+function StringToPaymentStatus(const aPaymentStatus: String): TPaymentStatus;
+
 implementation
 
 uses

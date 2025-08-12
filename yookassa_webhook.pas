@@ -47,8 +47,6 @@ type
     FOnLog: TYookassaLogEvent;
     procedure Log(aEventType: TEventType; const aMsg: string);
   public
-    constructor Create(const aSecretKey: string);
-
     // Main method. Call this from any web server implementation.
     // Takes the raw request body and returns a JSON response string.
     function HandleWebhook(const aRawBody: string): string;
@@ -98,12 +96,6 @@ begin
 end;
 
 { TYookassaWebhookHandler }
-
-constructor TYookassaWebhookHandler.Create(const aSecretKey: string);
-begin
-  inherited Create;
-  FSecretKey := aSecretKey;
-end;
 
 procedure TYookassaWebhookHandler.Log(aEventType: TEventType; const aMsg: string);
 begin

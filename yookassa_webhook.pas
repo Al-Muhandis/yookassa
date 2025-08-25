@@ -5,7 +5,8 @@ unit yookassa_webhook;
 interface
 
 uses
-  Classes, SysUtils, fpjson;
+  Classes, SysUtils, fpjson, yookassa_api
+  ;
 
 type
   { Event handler for logging }
@@ -20,17 +21,42 @@ type
     property ErrorCode: string read FErrorCode;
   end;
 
+  { Webhook object types based on event analysis }
+  TYookassaWebhookObjectType = (
+    wotUnknown,
+    wotPayment,
+    wotRefund,
+    wotPayout,
+    wotDeal,
+    wotPaymentMethod
+  );
+
   { TYookassaWebhookData }
   TYookassaWebhookData = class(TPersistent)
+  private
+    FPaymentResponse: TYookassaPaymentResponse;
+    FObjectType: TYookassaWebhookObjectType;
+    FRaw: TJSONObject;
+    function GetPaymentResponse: TYookassaPaymentResponse;
+    function DetermineObjectType(const aEvent: string): TYookassaWebhookObjectType;
   public
     Event: string;          // payment.succeeded, payment.waiting_for_capture, etc.
-    ObjectType: string;     // payment, refund, payout, etc.
-    ObjectId: string;       // Object ID (e.g. pay_123)
-    Status: string;         // Object status
-    Raw: TJSONObject;       // Full JSON for direct access
+
     function Clone: TYookassaWebhookData;
     constructor Create(aRaw: TJSONObject);
     destructor Destroy; override;
+
+    property ObjectType: TYookassaWebhookObjectType read FObjectType; // Determined from event
+    { Typed access to webhook objects }
+    property PaymentResponse: TYookassaPaymentResponse read GetPaymentResponse;
+    property Raw: TJSONObject read FRaw;       // Full JSON for direct access
+
+    { TODO: Add support for other webhook object types
+    property RefundResponse: TYookassaRefundResponse read GetRefundResponse;
+    property PayoutResponse: TYookassaPayoutResponse read GetPayoutResponse;
+    property DealResponse: TYookassaDealResponse read GetDealResponse;
+    property PaymentMethodResponse: TYookassaPaymentMethodResponse read GetPaymentMethodResponse;
+    }
   end;
 
   { Event handler type for webhook events }
@@ -43,6 +69,12 @@ type
     FOnPaymentWaitingForCapture: TYookassaWebhookEvent;
     FOnPaymentCanceled: TYookassaWebhookEvent;
     FOnRefundSucceeded: TYookassaWebhookEvent;
+    { TODO: Add handlers for other events
+    FOnPayoutSucceeded: TYookassaWebhookEvent;
+    FOnPayoutCanceled: TYookassaWebhookEvent;
+    FOnDealClosed: TYookassaWebhookEvent;
+    FOnPaymentMethodActive: TYookassaWebhookEvent;
+    }
     FOnLog: TYookassaLogEvent;
     procedure Log(aEventType: TEventType; const aMsg: string);
   public
@@ -58,6 +90,9 @@ type
 
 implementation
 
+uses
+  StrUtils;
+
 { EYooKassaWebhookError }
 
 constructor EYooKassaWebhookError.Create(const aMsg, aErrorCode: string);
@@ -68,26 +103,55 @@ end;
 
 { TYookassaWebhookData }
 
+function TYookassaWebhookData.DetermineObjectType(const aEvent: string): TYookassaWebhookObjectType;
+begin
+  if StartsStr('payment.', aEvent) then
+    Result := wotPayment
+  else if StartsStr('refund.', aEvent) then
+    Result := wotRefund
+  else if StartsStr('payout.', aEvent) then
+    Result := wotPayout
+  else if StartsStr('deal.', aEvent) then
+    Result := wotDeal
+  else if StartsStr('payment_method.', aEvent) then
+    Result := wotPaymentMethod
+  else
+    Result := wotUnknown;
+end;
+
+function TYookassaWebhookData.GetPaymentResponse: TYookassaPaymentResponse;
+var
+  aObjectJSON: TJSONObject;
+begin
+  if not Assigned(FPaymentResponse) and (ObjectType = wotPayment) then
+  begin
+    aObjectJSON := Raw.Find('object') as TJSONObject;
+    if Assigned(aObjectJSON) then
+      FPaymentResponse := TYookassaPaymentResponse.Create(aObjectJSON.Clone as TJSONObject);
+  end;
+  Result := FPaymentResponse;
+end;
+
 function TYookassaWebhookData.Clone: TYookassaWebhookData;
 begin
-  Result:=TYookassaWebhookData.Create(Raw.Clone as TJSONObject);
+  Result := TYookassaWebhookData.Create(Raw.Clone as TJSONObject);
 end;
 
 constructor TYookassaWebhookData.Create(aRaw: TJSONObject);
 var
   aObj: TJSONObject;
 begin
-  Raw := aRaw;
+  FRaw := aRaw;
   aObj := aRaw.Find('object') as TJSONObject;
-  Event := aRaw.Get('event', '');
-  ObjectType := aObj.Get('type', '');
-  ObjectId := aObj.Get('id', '');
-  Status := aObj.Get('status', '');
+
+  Event := aRaw.Get('event', EmptyStr);
+  FObjectType := DetermineObjectType(Event);
 end;
 
 destructor TYookassaWebhookData.Destroy;
 begin
-  Raw.Free;
+  FPaymentResponse.Free;
+  FRaw.Free;
   inherited Destroy;
 end;
 
@@ -126,33 +190,42 @@ begin
   aData := TYookassaWebhookData.Create(aJSON);
   try
     aEventType := aData.Event;
-    Log(etInfo, Format('Webhook: Processing event "%s" for object "%s" (status: %s)',
-      [aEventType, aData.ObjectId, aData.Status]));
+    Log(etInfo, Format('Webhook: Processing event "%s"', [aEventType]));
 
     // 3. Call the appropriate event handler
-    if Assigned(FOnPaymentSucceeded) and (aEventType = 'payment.succeeded') then
-    begin
-      Log(etInfo, 'Webhook: Triggering OnPaymentSucceeded');
-      FOnPaymentSucceeded(aData);
-    end
-    else if Assigned(FOnPaymentWaitingForCapture) and (aEventType = 'payment.waiting_for_capture') then
-    begin
-      Log(etInfo, 'Webhook: Triggering OnPaymentWaitingForCapture');
-      FOnPaymentWaitingForCapture(aData);
-    end
-    else if Assigned(FOnPaymentCanceled) and (aEventType = 'payment.canceled') then
-    begin
-      Log(etInfo, 'Webhook: Triggering OnPaymentCanceled');
-      FOnPaymentCanceled(aData);
-    end
-    else if Assigned(FOnRefundSucceeded) and (aEventType = 'refund.succeeded') then
-    begin
-      Log(etInfo, 'Webhook: Triggering OnRefundSucceeded');
-      FOnRefundSucceeded(aData);
-    end
-    else
-    begin
-      Log(etWarning, Format('Webhook: Unknown or unhandled event: %s', [aEventType]));
+    case aEventType of
+      'payment.succeeded':
+        if Assigned(FOnPaymentSucceeded) then
+        begin
+          Log(etInfo, 'Webhook: Triggering OnPaymentSucceeded');
+          FOnPaymentSucceeded(aData);
+        end;
+      'payment.waiting_for_capture':
+        if Assigned(FOnPaymentWaitingForCapture) then
+        begin
+          Log(etInfo, 'Webhook: Triggering OnPaymentWaitingForCapture');
+          FOnPaymentWaitingForCapture(aData);
+        end;
+      'payment.canceled':
+        if Assigned(FOnPaymentCanceled) then
+        begin
+          Log(etInfo, 'Webhook: Triggering OnPaymentCanceled');
+          FOnPaymentCanceled(aData);
+        end;
+      'refund.succeeded':
+        if Assigned(FOnRefundSucceeded) then
+        begin
+          Log(etInfo, 'Webhook: Triggering OnRefundSucceeded');
+          FOnRefundSucceeded(aData);
+        end;
+      { TODO: Add other event handlers
+      'payout.succeeded': ...,
+      'payout.canceled': ...,
+      'deal.closed': ...,
+      'payment_method.active': ...
+      }
+      else
+        Log(etWarning, Format('Webhook: Unknown or unhandled event: %s', [aEventType]));
     end;
 
     // 4. Return success response

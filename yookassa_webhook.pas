@@ -254,14 +254,25 @@ function TYookassaWebhookHandler.HandleWebhook(const aRawBody: string): string;
 var
   aJSON: TJSONObject;
   aData: TYookassaWebhookData;
+  aJSONData: TJSONData;
 begin
   Result := '{"error": "Bad Request"}';
+  aJSON := nil;
+  aData := nil;
 
   Log(etDebug, 'Webhook: Received raw body: ' + aRawBody);
 
   // 1. Parse JSON
   try
-    aJSON := TJSONObject(GetJSON(aRawBody));
+    aJSONData := GetJSON(aRawBody);
+    if not (aJSONData is TJSONObject) then
+    begin
+      aJSONData.Free;
+      Log(etError, 'Webhook: Root element is not JSON object');
+      Result := '{"error": "Invalid JSON structure"}';
+      Exit;
+    end;
+    aJSON := aJSONData as TJSONObject;
     Log(etDebug, 'Webhook: JSON parsed successfully');
   except
     on E: Exception do
@@ -272,8 +283,19 @@ begin
     end;
   end;
 
-  // Передаем aJSON объект на владение новому экземпляру TYookassaWebhookData
-  aData := TYookassaWebhookData.Create(aJSON, True);
+  // 2. Create WebhookData with exception safety
+  try
+    aData := TYookassaWebhookData.Create(aJSON, True);
+    aJSON := nil; // Transfer ownership successfully
+  except
+    on E: Exception do
+    begin
+      aJSON.Free; // Cleanup JSON if WebhookData creation failed
+      Log(etError, 'Webhook: Data creation failed - ' + E.Message);
+      Result := '{"error": "Data processing error"}';
+      Exit;
+    end;
+  end;
   try
     Log(etInfo, Format('Webhook: Processing event "%s"', [aData.Event]));
 

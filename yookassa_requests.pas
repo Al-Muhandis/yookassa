@@ -242,16 +242,19 @@ end;
 
 function TYookassaRequest.Execute: TYookassaResponse;
 var
-  RespStr: string;
-  RespJSON: TJSONObject;
+  aRespStr: string;
+  aRespJSON: TJSONObject;
+  aTransferredJSON: Boolean;
 begin
-  RespStr := DoExecute;
-  RespJSON := TJSONObject(GetJSON(RespStr));
+  aRespStr := DoExecute;
+  aRespJSON := TJSONObject(GetJSON(aRespStr));
+  aTransferredJSON := False;
   try
-    Result := CreateResponse(RespJSON); // abstract factory method
-    RespJSON := nil;
+    Result := CreateResponse(aRespJSON); // abstract factory method
+    aTransferredJSON := True; // JSON теперь принадлежит Response
   finally
-    RespJSON.Free;
+    if not aTransferredJSON then
+      aRespJSON.Free; // Освобождаем только если передача не удалась
   end;
 end;
 

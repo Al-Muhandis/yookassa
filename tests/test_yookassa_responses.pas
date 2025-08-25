@@ -1,11 +1,11 @@
-unit test_yookassa_api;
+unit test_yookassa_responses;
 
 {$mode objfpc}{$H+}
 
 interface
 
 uses
-  Classes, SysUtils, fpcunit, testregistry, fpjson, yookassa_responses, yookassa_models, yookassa_requests
+  Classes, SysUtils, fpcunit, testregistry, fpjson, yookassa_api, yookassa_models, yookassa_requests
   ;
 
 type

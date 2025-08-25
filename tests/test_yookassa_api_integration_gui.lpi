@@ -115,16 +115,11 @@
         <IsPartOfProject Value="True"/>
       </Unit>
       <Unit>
-        <Filename Value="tests_test_yookassa_api_integration.pas"/>
-        <IsPartOfProject Value="True"/>
-        <UnitName Value="test_yookassa_api_integration"/>
-      </Unit>
-      <Unit>
-        <Filename Value="..\yookassa_api.pas"/>
-        <IsPartOfProject Value="True"/>
-      </Unit>
-      <Unit>
         <Filename Value="..\yookassa_exceptions.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\yookassa_responses.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit>
     </Units>

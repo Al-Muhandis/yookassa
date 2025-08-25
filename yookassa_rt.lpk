@@ -19,14 +19,23 @@
     </CompilerOptions>
     <Description Value="Yookassa API wrapper"/>
     <License Value="MIT"/>
+    <Version Release="1"/>
     <Files>
-      <Item>
-        <Filename Value="yookassa_api.pas"/>
-        <UnitName Value="yookassa_api"/>
-      </Item>
       <Item>
         <Filename Value="yookassa_webhook.pas"/>
         <UnitName Value="yookassa_webhook"/>
+      </Item>
+      <Item>
+        <Filename Value="yookassa_models.pas"/>
+        <UnitName Value="yookassa_models"/>
+      </Item>
+      <Item>
+        <Filename Value="yookassa_requests.pas"/>
+        <UnitName Value="yookassa_requests"/>
+      </Item>
+      <Item>
+        <Filename Value="yookassa_responses.pas"/>
+        <UnitName Value="yookassa_responses"/>
       </Item>
     </Files>
     <RequiredPkgs>

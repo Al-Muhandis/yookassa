@@ -5,7 +5,7 @@ unit test_yookassa_api_integration;
 interface
 
 uses
-  Classes, SysUtils, fpcunit, testregistry, fpjson, yookassa_api, eventlog
+  Classes, SysUtils, fpcunit, testregistry, fpjson, eventlog, yookassa_responses, yookassa_models, yookassa_requests
   ;
 
 type

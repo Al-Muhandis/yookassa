@@ -48,7 +48,7 @@ type
 implementation
 
 uses
-  StrUtils, yookassa_api, fpjson
+  StrUtils, yookassa_responses, fpjson
   ;
 
 { TTestYookassaWebhook }

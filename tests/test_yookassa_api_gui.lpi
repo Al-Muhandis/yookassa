@@ -113,7 +113,7 @@
         <IsPartOfProject Value="True"/>
       </Unit>
       <Unit>
-        <Filename Value="..\yookassa_api.pas"/>
+        <Filename Value="..\yookassa_responses.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit>
       <Unit>
@@ -122,6 +122,14 @@
       </Unit>
       <Unit>
         <Filename Value="test_yookassa_webhook.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\yookassa_models.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="..\yookassa_requests.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit>
     </Units>

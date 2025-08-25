@@ -5,7 +5,7 @@ unit yookassa_webhook;
 interface
 
 uses
-  Classes, SysUtils, fpjson, yookassa_api
+  Classes, SysUtils, fpjson, yookassa_responses
   ;
 
 type

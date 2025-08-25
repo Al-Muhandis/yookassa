@@ -11,15 +11,22 @@ uses
 type
   TYookassaLogEvent = procedure(aEvent: TEventType; const Msg: string) of object;
 
-  { TYookassaResponse }
-  TYookassaResponse = class
+  { TYookassaObject }
+  TYookassaObject = class
   private
-    FRaw: TJSONObject;                  
-    function GetId: string; virtual; abstract;
+    FRaw: TJSONObject;
   public
-    constructor Create(ARaw: TJSONObject);
+    constructor Create(aRaw: TJSONObject);
     destructor Destroy; override;
     property Raw: TJSONObject read FRaw;
+  end;
+
+  { TYookassaResponse }
+  TYookassaResponse = class(TYookassaObject)
+  private
+    function GetId: string; virtual; abstract;
+  public
+    property ID: String read GetId;
   end;
 
   TPaymentStatus = (
@@ -43,7 +50,6 @@ type
     property ConfirmationURL: string read GetConfirmationURL;
     property Amount: Currency read GetAmount;
     property Currency: String read GetCurrency;
-    property ID: String read GetId;
     property Status: TPaymentStatus read GetStatus;
   end;
 
@@ -397,14 +403,14 @@ begin
   end;
 end;
 
-{ TYookassaResponse }
+{ TYookassaObject }
 
-constructor TYookassaResponse.Create(ARaw: TJSONObject);
+constructor TYookassaObject.Create(aRaw: TJSONObject);
 begin
   FRaw:=ARaw;
 end;
 
-destructor TYookassaResponse.Destroy;
+destructor TYookassaObject.Destroy;
 begin
   FRaw.Free;
   inherited Destroy;

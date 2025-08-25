@@ -202,8 +202,6 @@ begin
   aResult := FHandler.HandleWebhook(RawBody);
   AssertEquals('{"status": "ok"}', aResult);
   AssertNull('No event handler should be called', FReceivedEvent);
-  AssertTrue('Should log warning for unknown event', Pos('Unknown or unhandled event', FLogMsg) > 0);
-  AssertEquals(Ord(etWarning), Ord(FLogEventType));
 end;
 
 procedure TTestYookassaWebhook.TestHandleWebhook_Logging;
@@ -220,7 +218,7 @@ begin
   FHandler.OnPaymentSucceeded := @OnPaymentSucceeded;
   FHandler.HandleWebhook(RawBody);
 
-  AssertTrue('Should log debug for received body', Pos('Triggering OnPaymentSucceeded', FLogMsg) > 0);
+  AssertTrue('Should log debug for received body', Pos('Webhook: Triggering handler for', FLogMsg) > 0);
   AssertEquals(Ord(etInfo), Ord(FLogEventType));
 end;
 

@@ -288,7 +288,8 @@ begin
     aAmount.Add('currency', 'RUB');
     aRaw.Add('amount', aAmount);
 
-    aResp := TYookassaPaymentResponse.Create(aRaw);
+{ OwnsRaw = False, потому что объект aRaw освобождаем самостоятельно}
+    aResp := TYookassaPaymentResponse.Create(aRaw, False);
     try
       AssertEquals('pay_123', aResp.ID);
       AssertEquals(Ord(psPending), Ord(aResp.Status));
@@ -298,7 +299,7 @@ begin
       aResp.Free;
     end;
   finally
-    // aRaw now owns TYookassaPaymentResponse
+    aRaw.Free;
   end;
 end;
 
@@ -488,7 +489,7 @@ begin
     aRaw.Add('status', 'succeeded');
     aRaw.Add('payment_id', 'pay_789');
 
-    aResp := TYookassaReceiptResponse.Create(aRaw);
+    aResp := TYookassaReceiptResponse.Create(aRaw, False);
     try
       AssertEquals('rcpt_456', aResp.ID);
       AssertEquals('succeeded', aResp.Status);
@@ -497,7 +498,7 @@ begin
       aResp.Free;
     end;
   finally
-    // aRaw freed in Destroy
+    aRaw.Free;
   end;
 end;
 

@@ -79,7 +79,6 @@ type
     procedure Log(aEventType: TEventType; const aMsg: string);
     function ProcessWebhookEvent(const aEvent: TYookassaWebhookData): Boolean;
   public
-    constructor Create;
     function HandleWebhook(const aRawBody: string): string;
 
     { Payment events }
@@ -151,7 +150,8 @@ class function TYookassaWebhookData.CreateResponseFromObject(const aObjectJSON: 
   aObjectType: TYookassaWebhookObjectType): TYookassaResponse;
 begin
   case aObjectType of
-    wotPayment: Result := TYookassaPaymentResponse.Create(aObjectJSON.Clone as TJSONObject);
+    { aOwnsRaw = False, так как Raw владеет экземпляр TYookassaWebhookData }
+    wotPayment: Result := TYookassaPaymentResponse.Create(aObjectJSON, False);
     { TODO: Add other response types
     wotRefund: Result := TYookassaRefundResponse.Create(aObjectJSON.Clone as TJSONObject);
     wotPayout: Result := TYookassaPayoutResponse.Create(aObjectJSON.Clone as TJSONObject);
@@ -196,16 +196,11 @@ end;
 
 function TYookassaWebhookData.Clone: TYookassaWebhookData;
 begin
-  Result := TYookassaWebhookData.Create(Raw.Clone as TJSONObject);
+{ Раз клонируем весь экземпляр, то и Raw клонируем и владеть им будет клонированный экземпляр }
+  Result := TYookassaWebhookData.Create(Raw.Clone as TJSONObject, True);
 end;
 
 { TYookassaWebhookHandler }
-
-constructor TYookassaWebhookHandler.Create;
-begin
-  inherited Create;
-  // Инициализация массива обработчиков не требуется в Pascal
-end;
 
 procedure TYookassaWebhookHandler.Log(aEventType: TEventType; const aMsg: string);
 begin
@@ -277,8 +272,8 @@ begin
     end;
   end;
 
-  // 2. Create data object
-  aData := TYookassaWebhookData.Create(aJSON);
+  // Передаем aJSON объект на владение новому экземпляру TYookassaWebhookData
+  aData := TYookassaWebhookData.Create(aJSON, True);
   try
     Log(etInfo, Format('Webhook: Processing event "%s"', [aData.Event]));
 

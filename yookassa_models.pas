@@ -151,7 +151,7 @@ type
 
   // Модель получателя платежа
   { TYookassaReceiver }
-  TYookassaReceiver = class
+  TYookassaReceiver = class(TYookassaAPIObject)
   private
     FReceiverType: TYookassaReceiverType;
     FAccountNumber: string;
@@ -161,7 +161,7 @@ type
   public
     constructor Create; overload;
     constructor Create(aType: TYookassaReceiverType); overload;
-    function ToJSON: TJSONObject;
+    function ToJSON: TJSONObject; override;
     property ReceiverType: TYookassaReceiverType read FReceiverType write FReceiverType;
     property AccountNumber: string read FAccountNumber write FAccountNumber;
     property Bic: string read FBic write FBic;

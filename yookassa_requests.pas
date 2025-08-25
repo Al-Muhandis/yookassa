@@ -24,6 +24,8 @@ type
    function GetAuthHeader: string;
    function GetDefaultApiBaseUrl: string;
   protected
+{ Raw должен уничтожаться при освобождении экземпляра ответа TYookassaResponse.
+  Для этого в наследниках конструктор TYookassaResponse должен вызываться с параметром (OwnsRaw = True) }
    function CreateResponse(aRaw: TJSONObject): TYookassaResponse; virtual; abstract;
    function GetEndpoint: string; virtual; abstract;
    function GetMethod: string; virtual; abstract;
@@ -284,7 +286,7 @@ end;
 
 function TYookassaCreatePaymentRequest.CreateResponse(aRaw: TJSONObject): TYookassaResponse;
 begin
-  Result := TYookassaPaymentResponse.Create(aRaw);
+  Result := TYookassaPaymentResponse.Create(aRaw, True);
 end;
 
 function TYookassaCreatePaymentRequest.GetEndpoint: string;
@@ -364,7 +366,7 @@ end;
 
 function TYookassaGetPaymentRequest.CreateResponse(aRaw: TJSONObject): TYookassaResponse;
 begin
-  Result := TYookassaPaymentResponse.Create(aRaw);
+  Result := TYookassaPaymentResponse.Create(aRaw, True);
 end;
 
 function TYookassaGetPaymentRequest.ToJSON: TJSONObject;
@@ -395,7 +397,7 @@ end;
 
 function TYookassaCreateReceiptRequest.CreateResponse(aRaw: TJSONObject): TYookassaResponse;
 begin
-  Result := TYookassaReceiptResponse.Create(aRaw);
+  Result := TYookassaReceiptResponse.Create(aRaw, True);
 end;
 
 function TYookassaCreateReceiptRequest.GetEndpoint: string;

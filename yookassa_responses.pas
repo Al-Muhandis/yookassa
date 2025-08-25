@@ -15,8 +15,9 @@ type
   TYookassaObject = class
   private
     FRaw: TJSONObject;
+    FOwnsRaw: Boolean;
   public
-    constructor Create(aRaw: TJSONObject);
+    constructor Create(aRaw: TJSONObject; aOwnsRaw: Boolean);
     destructor Destroy; override;
     property Raw: TJSONObject read FRaw;
   end;
@@ -88,14 +89,16 @@ end;
 
 { TYookassaObject }
 
-constructor TYookassaObject.Create(aRaw: TJSONObject);
+constructor TYookassaObject.Create(aRaw: TJSONObject; aOwnsRaw: Boolean);
 begin
   FRaw:=ARaw;
+  FOwnsRaw:=aOwnsRaw;
 end;
 
 destructor TYookassaObject.Destroy;
 begin
-  FRaw.Free;
+  if FOwnsRaw then
+    FRaw.Free;
   inherited Destroy;
 end;
 

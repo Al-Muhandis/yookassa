@@ -3,7 +3,7 @@ program test_yookassa_api_integration_gui;
 {$mode objfpc}{$H+}
 
 uses
-  Interfaces, Forms, GuiTestRunner, test_yookassa_api_integration, yookassa_responses
+  Interfaces, Forms, GuiTestRunner, test_yookassa_api_integration
   ;
 
 {$R *.res}

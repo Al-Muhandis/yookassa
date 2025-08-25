@@ -33,12 +33,22 @@ type
     procedure TestHandleWebhook_InvalidJSON;
     procedure TestHandleWebhook_UnknownEvent;
     procedure TestHandleWebhook_Logging;
+    // New tests for PaymentResponse property and object type detection
+    procedure TestWebhookData_PaymentResponse_Properties;
+    procedure TestWebhookData_ObjectType_Payment;
+    procedure TestWebhookData_ObjectType_Refund;
+    procedure TestWebhookData_ObjectType_Unknown;
+    procedure TestWebhookData_Clone;
+    procedure TestWebhookData_Event_Property;
+    procedure TestWebhookData_PaymentResponse_Creation;
+    procedure TestWebhookData_PaymentResponse_Null_When_No_Object;
+    procedure TestWebhookException_Creation;
   end;
 
 implementation
 
 uses
-  StrUtils, yookassa_api
+  StrUtils, yookassa_api, fpjson
   ;
 
 { TTestYookassaWebhook }
@@ -93,7 +103,9 @@ const
     '"object":{' +
       '"id":"pay_123abc",' +
       '"type":"payment",' +
-      '"status":"succeeded"' +
+      '"status":"succeeded",' +
+      '"amount":{"value":"100.00","currency":"RUB"},' +
+      '"confirmation":{"confirmation_url":"https://yookassa.ru/checkout/pay/test"}' +
     '}' +
   '}';
 var
@@ -117,7 +129,8 @@ const
     '"object":{' +
       '"id":"pay_456def",' +
       '"type":"payment",' +
-      '"status":"waiting_for_capture"' +
+      '"status":"waiting_for_capture",' +
+      '"amount":{"value":"200.00","currency":"RUB"}' +
     '}' +
   '}';
 var
@@ -130,6 +143,7 @@ begin
   AssertNotNull('Event should be received', FReceivedEvent);
   AssertEquals('payment.waiting_for_capture', FReceivedEvent.Event);
   AssertEquals('pay_456def', FReceivedEvent.PaymentResponse.ID);
+  AssertEquals(Ord(psWaitingForCapture), Ord(FReceivedEvent.PaymentResponse.Status));
 end;
 
 procedure TTestYookassaWebhook.TestHandleWebhook_PaymentCanceled;
@@ -173,8 +187,7 @@ begin
   AssertEquals('{"status": "ok"}', aResult);
   AssertNotNull('Event should be received', FReceivedEvent);
   AssertEquals('refund.succeeded', FReceivedEvent.Event);
-  { #todo :
-  AssertEquals('rfnd_999', FReceivedEvent.RefundResponse.ID);    }
+  AssertEquals(Ord(wotRefund), Ord(FReceivedEvent.ObjectType));
 end;
 
 procedure TTestYookassaWebhook.TestHandleWebhook_InvalidJSON;
@@ -183,7 +196,7 @@ var
 begin
   aResult := FHandler.HandleWebhook('{"invalid": json}');
   AssertTrue('Response should indicate error', Pos('error', aResult) > 0);
-  AssertTrue(StartsStr('Webhook: Invalid JSON - ', FLogMsg)); // Log not called due to early exit
+  AssertTrue('Should log invalid JSON error', StartsStr('Webhook: Invalid JSON - ', FLogMsg));
 end;
 
 procedure TTestYookassaWebhook.TestHandleWebhook_UnknownEvent;
@@ -222,8 +235,223 @@ begin
   AssertEquals(Ord(etInfo), Ord(FLogEventType));
 end;
 
+procedure TTestYookassaWebhook.TestWebhookData_PaymentResponse_Properties;
+const
+  RawBody = '{' +
+    '"event":"payment.succeeded",' +
+    '"object":{' +
+      '"id":"pay_test_props",' +
+      '"type":"payment",' +
+      '"status":"succeeded",' +
+      '"amount":{"value":"150.75","currency":"RUB"},' +
+      '"confirmation":{"confirmation_url":"https://yookassa.ru/checkout/pay/props"}' +
+    '}' +
+  '}';
+var
+  aJSON: TJSONObject;
+  aWebhookData: TYookassaWebhookData;
+  aPaymentResp: TYookassaPaymentResponse;
+begin
+  aJSON := TJSONObject(GetJSON(RawBody));
+  aWebhookData := TYookassaWebhookData.Create(aJSON);
+  try
+    aPaymentResp := aWebhookData.PaymentResponse;
+    AssertNotNull('PaymentResponse should be created', aPaymentResp);
+    AssertEquals('Payment ID should match', 'pay_test_props', aPaymentResp.ID);
+    AssertEquals('Payment status should be succeeded', Ord(psSucceeded), Ord(aPaymentResp.Status));
+    AssertEquals('Payment amount should match', 150.75, aPaymentResp.Amount);
+    AssertEquals('Payment currency should match', 'RUB', aPaymentResp.Currency);
+    AssertEquals('Confirmation URL should match', 'https://yookassa.ru/checkout/pay/props', aPaymentResp.ConfirmationURL);
+  finally
+    aWebhookData.Free;
+  end;
+end;
+
+procedure TTestYookassaWebhook.TestWebhookData_ObjectType_Payment;
+const
+  RawBody = '{' +
+    '"event":"payment.succeeded",' +
+    '"object":{"id":"pay_123","type":"payment"}' +
+  '}';
+var
+  aJSON: TJSONObject;
+  aWebhookData: TYookassaWebhookData;
+begin
+  aJSON := TJSONObject(GetJSON(RawBody));
+  aWebhookData := TYookassaWebhookData.Create(aJSON);
+  try
+    AssertEquals('Object type should be payment', Ord(wotPayment), Ord(aWebhookData.ObjectType));
+    AssertEquals('Event should match', 'payment.succeeded', aWebhookData.Event);
+  finally
+    aWebhookData.Free;
+  end;
+end;
+
+procedure TTestYookassaWebhook.TestWebhookData_ObjectType_Refund;
+const
+  RawBody = '{' +
+    '"event":"refund.succeeded",' +
+    '"object":{"id":"rfnd_123","type":"refund"}' +
+  '}';
+var
+  aJSON: TJSONObject;
+  aWebhookData: TYookassaWebhookData;
+begin
+  aJSON := TJSONObject(GetJSON(RawBody));
+  aWebhookData := TYookassaWebhookData.Create(aJSON);
+  try
+    AssertEquals('Object type should be refund', Ord(wotRefund), Ord(aWebhookData.ObjectType));
+    AssertEquals('Event should match', 'refund.succeeded', aWebhookData.Event);
+  finally
+    aWebhookData.Free;
+  end;
+end;
+
+procedure TTestYookassaWebhook.TestWebhookData_ObjectType_Unknown;
+const
+  RawBody = '{' +
+    '"event":"custom.event",' +
+    '"object":{"id":"obj_123","type":"custom"}' +
+  '}';
+var
+  aJSON: TJSONObject;
+  aWebhookData: TYookassaWebhookData;
+begin
+  aJSON := TJSONObject(GetJSON(RawBody));
+  aWebhookData := TYookassaWebhookData.Create(aJSON);
+  try
+    AssertEquals('Object type should be unknown', Ord(wotUnknown), Ord(aWebhookData.ObjectType));
+    AssertEquals('Event should match', 'custom.event', aWebhookData.Event);
+  finally
+    aWebhookData.Free;
+  end;
+end;
+
+procedure TTestYookassaWebhook.TestWebhookData_Clone;
+const
+  RawBody = '{' +
+    '"event":"payment.succeeded",' +
+    '"object":{' +
+      '"id":"pay_clone_test",' +
+      '"type":"payment",' +
+      '"status":"succeeded"' +
+    '}' +
+  '}';
+var
+  aJSON: TJSONObject;
+  aOriginal, aClone: TYookassaWebhookData;
+begin
+  aJSON := TJSONObject(GetJSON(RawBody));
+  aOriginal := TYookassaWebhookData.Create(aJSON);
+  try
+    aClone := aOriginal.Clone;
+    try
+      AssertNotNull('Clone should not be nil', aClone);
+      AssertTrue('Clone should be different object', aOriginal <> aClone);
+      AssertEquals('Clone event should match original', aOriginal.Event, aClone.Event);
+      AssertEquals('Clone object type should match original', Ord(aOriginal.ObjectType), Ord(aClone.ObjectType));
+
+      // Test that both can access PaymentResponse independently
+      AssertNotNull('Original PaymentResponse should work', aOriginal.PaymentResponse);
+      AssertNotNull('Clone PaymentResponse should work', aClone.PaymentResponse);
+      AssertEquals('Both should have same payment ID',
+        aOriginal.PaymentResponse.ID, aClone.PaymentResponse.ID);
+    finally
+      aClone.Free;
+    end;
+  finally
+    aOriginal.Free;
+  end;
+end;
+
+procedure TTestYookassaWebhook.TestWebhookData_Event_Property;
+const
+  RawBody = '{' +
+    '"event":"payment.waiting_for_capture",' +
+    '"object":{"id":"pay_123","type":"payment"}' +
+  '}';
+var
+  aJSON: TJSONObject;
+  aWebhookData: TYookassaWebhookData;
+begin
+  aJSON := TJSONObject(GetJSON(RawBody));
+  aWebhookData := TYookassaWebhookData.Create(aJSON);
+  try
+    AssertEquals('Event property should return correct value',
+      'payment.waiting_for_capture', aWebhookData.Event);
+  finally
+    aWebhookData.Free;
+  end;
+end;
+
+procedure TTestYookassaWebhook.TestWebhookData_PaymentResponse_Creation;
+const
+  RawBody = '{' +
+    '"event":"payment.succeeded",' +
+    '"object":{' +
+      '"id":"pay_creation_test",' +
+      '"type":"payment",' +
+      '"status":"succeeded",' +
+      '"amount":{"value":"99.99","currency":"USD"}' +
+    '}' +
+  '}';
+var
+  aJSON: TJSONObject;
+  aWebhookData: TYookassaWebhookData;
+  aPaymentResp1, aPaymentResp2: TYookassaPaymentResponse;
+begin
+  aJSON := TJSONObject(GetJSON(RawBody));
+  aWebhookData := TYookassaWebhookData.Create(aJSON);
+  try
+    // Test lazy creation and caching
+    aPaymentResp1 := aWebhookData.PaymentResponse;
+    aPaymentResp2 := aWebhookData.PaymentResponse;
+
+    AssertNotNull('First call should create PaymentResponse', aPaymentResp1);
+    AssertNotNull('Second call should return cached PaymentResponse', aPaymentResp2);
+    AssertTrue('Both calls should return same instance', aPaymentResp1 = aPaymentResp2);
+
+    AssertEquals('Payment ID should be correct', 'pay_creation_test', aPaymentResp1.ID);
+    AssertEquals('Payment amount should be correct', 99.99, aPaymentResp1.Amount);
+    AssertEquals('Payment currency should be correct', 'USD', aPaymentResp1.Currency);
+  finally
+    aWebhookData.Free;
+  end;
+end;
+
+procedure TTestYookassaWebhook.TestWebhookData_PaymentResponse_Null_When_No_Object;
+const
+  RawBody = '{' +
+    '"event":"payment.succeeded"' +
+  '}';
+var
+  aJSON: TJSONObject;
+  aWebhookData: TYookassaWebhookData;
+begin
+  aJSON := TJSONObject(GetJSON(RawBody));
+  aWebhookData := TYookassaWebhookData.Create(aJSON);
+  try
+    AssertNull('PaymentResponse should be nil when no object in webhook',
+      aWebhookData.PaymentResponse);
+  finally
+    aWebhookData.Free;
+  end;
+end;
+
+procedure TTestYookassaWebhook.TestWebhookException_Creation;
+var
+  aException: EYooKassaWebhookError;
+begin
+  aException := EYooKassaWebhookError.Create('Test webhook error', 'WEBHOOK_ERROR');
+  try
+    AssertEquals('Message should match', 'Test webhook error', aException.Message);
+    AssertEquals('Error code should match', 'WEBHOOK_ERROR', aException.ErrorCode);
+  finally
+    aException.Free;
+  end;
+end;
+
 initialization
   RegisterTest(TTestYookassaWebhook);
 
 end.
-

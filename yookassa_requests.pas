@@ -120,11 +120,8 @@ type
 implementation
 
 uses
-  base64, opensslsockets
+  base64, opensslsockets, yookassa_constants
   ;
-
-const
-  _YK_DEFAULT_API_URL = 'https://api.yookassa.ru/v3';
 
 { TYookassaRequest }
 
@@ -136,12 +133,12 @@ end;
 
 function TYookassaRequest.GetAuthHeader: string;
 begin
-  Result := 'Basic ' + EncodeStringBase64(FShopId + ':' + FSecretKey);
+  Result := _AUTH_BASIC_PREFIX + EncodeStringBase64(FShopId + ':' + FSecretKey);
 end;
 
 function TYookassaRequest.GetDefaultApiBaseUrl: string;
 begin
-  Result := _YK_DEFAULT_API_URL;
+  Result := _YOOKASSA_DEFAULT_API_URL;
 end;
 
 function TYookassaRequest.GenerateIdempotenceKey: string;
@@ -193,27 +190,26 @@ begin
 
       aReqJSON := BuildRequestJSON;
 
-      aHttp.AddHeader('Authorization', GetAuthHeader);
-      aHttp.AddHeader('Content-Type', 'application/json');
+      aHttp.AddHeader(_HEADER_AUTHORIZATION, GetAuthHeader);
+      aHttp.AddHeader(_HEADER_CONTENT_TYPE, _CONTENT_TYPE_JSON);
       aIdempotenceKey := GenerateIdempotenceKey;
-      aHttp.AddHeader('Idempotence-Key', aIdempotenceKey);
+      aHttp.AddHeader(_HEADER_IDEMPOTENCE_KEY, aIdempotenceKey);
 
-      Log(etDebug, Format('Request (Idempotence-Key - %s) (%s %s):%s%s',
-        [aIdempotenceKey, GetMethod, GetEndpoint, LineEnding, aReqJSON]));
+      Log(etDebug, Format(_LOG_REQUEST_FORMAT, [aIdempotenceKey, GetMethod, GetEndpoint, LineEnding, aReqJSON]));
 
       aReqStream := TStringStream.Create(aReqJSON);
       try
         aHttp.RequestBody := aReqStream;
         case GetMethod of
-          'POST': aRespStr := aHttp.Post(GetEndpoint);
-          'GET':  aRespStr := aHttp.Get(GetEndpoint);
+          _HTTP_METHOD_POST: aRespStr := aHttp.Post(GetEndpoint);
+          _HTTP_METHOD_GET:  aRespStr := aHttp.Get(GetEndpoint);
         else
-          raise Exception.Create('HTTP method not supported: ' + GetMethod);
+          raise Exception.Create(Format(_ERR_HTTP_METHOD_NOT_SUPPORTED, [GetMethod]));
         end;
       finally
         aHttp.RequestBody.Free;
       end;
-      Log(etDebug, Format('Response (status: %d): %s', [aHttp.ResponseStatusCode, aRespStr]));
+      Log(etDebug, Format(_LOG_RESPONSE_FORMAT, [aHttp.ResponseStatusCode, aRespStr]));
 
       // Checking the status (API error)
       if aHttp.ResponseStatusCode >= 400 then
@@ -222,7 +218,7 @@ begin
           ErrJSON := TJSONObject(GetJSON(aRespStr));
         except
           on E: Exception do
-            raise EYooKassaError.CreateFmt('Invalid error response from YooKassa: %s', [aRespStr]);
+            raise EYooKassaError.CreateFmt(_JSON_FIELD_DESCRIPTION, [aRespStr]);
         end;
         raise EYooKassaError.CreateFromResponse(aHttp.ResponseStatusCode, ErrJSON);
       end;
@@ -263,21 +259,21 @@ end;
 function TYookassaCreatePaymentRequest.BuildAmountJSON: TJSONObject;
 begin
   Result := TJSONObject.Create;
-  Result.Add('value', Format('%.2f', [FAmount], _FrmtStngsJSON));
-  Result.Add('currency', FCurrency);
+  Result.Add(_JSON_FIELD_VALUE, Format('%.2f', [FAmount], _FrmtStngsJSON));
+  Result.Add(_JSON_FIELD_CURRENCY, FCurrency);
 end;
 
 function TYookassaCreatePaymentRequest.BuildConfirmationJSON: TJSONObject;
 begin
   Result := TJSONObject.Create;
-  Result.Add('type', 'redirect');
-  Result.Add('return_url', FReturnUrl);
+  Result.Add(_JSON_FIELD_TYPE, _CONFIRMATION_TYPE_REDIRECT);
+  Result.Add(_JSON_FIELD_RETURN_URL, FReturnUrl);
 end;
 
 function TYookassaCreatePaymentRequest.BuildMetadataJSON: TJSONObject;
 begin
   Result := TJSONObject.Create;
-  Result.Add('order_id', FMetaOrderId);
+  Result.Add(_JSON_FIELD_ORDER_ID, FMetaOrderId);
 end;
 
 function TYookassaCreatePaymentRequest.GetReceiver: TYookassaReceiver;
@@ -294,12 +290,12 @@ end;
 
 function TYookassaCreatePaymentRequest.GetEndpoint: string;
 begin
-  Result := FApiBaseUrl + '/payments';
+  Result := FApiBaseUrl + _ENDPOINT_PAYMENTS;
 end;
 
 function TYookassaCreatePaymentRequest.GetMethod: string;
 begin
-  Result := 'POST';
+  Result := _HTTP_METHOD_POST;
 end;
 
 class function TYookassaCreatePaymentRequest.CreatePayment(const aShopId, aSecretKey: string;
@@ -337,17 +333,17 @@ begin
     EYooKassaValidationError.RaiseIfEmpty(FCurrency, 'Currency');
     EYooKassaValidationError.RaiseIfEmpty(FDescription, 'Description');
     EYooKassaValidationError.RaiseIfEmpty(FReturnUrl, 'ReturnUrl');
-    Result.Add('amount', BuildAmountJSON);
-    Result.Add('description', FDescription);
-    Result.Add('confirmation', BuildConfirmationJSON);
-    Result.Add('capture', True);
+    Result.Add(_JSON_FIELD_AMOUNT, BuildAmountJSON);
+    Result.Add(_JSON_FIELD_DESCRIPTION, FDescription);
+    Result.Add(_JSON_FIELD_CONFIRMATION, BuildConfirmationJSON);
+    Result.Add(_JSON_FIELD_CAPTURE, _DEFAULT_CAPTURE);
     if FMetaOrderId <> EmptyStr then
-      Result.Add('metadata', BuildMetadataJSON);
+      Result.Add(_JSON_FIELD_METADATA, BuildMetadataJSON);
     if Assigned(FReceipt) then
-      Result.Add('receipt', FReceipt.ToJSON);
+      Result.Add(_JSON_FIELD_RECEIPT, FReceipt.ToJSON);
     // receiver (for payout to bank, phone, wallet)
     if Assigned(FReceiver) then
-      Result.Add('receiver', FReceiver.ToJSON);
+      Result.Add(_JSON_FIELD_RECEIVER, FReceiver.ToJSON);
   except
     FreeAndNil(Result);
     raise;
@@ -358,13 +354,13 @@ end;
 
 function TYookassaGetPaymentRequest.GetMethod: string;
 begin
-  Result := 'GET';
+  Result := _HTTP_METHOD_GET;
 end;
 
 function TYookassaGetPaymentRequest.GetEndpoint: string;
 begin
   EYooKassaValidationError.RaiseIfEmpty(FPaymentId, 'PaymentId');
-  Result := FApiBaseUrl + '/payments/' + FPaymentId;
+  Result := FApiBaseUrl + _ENDPOINT_PAYMENTS + '/' + FPaymentId;
 end;
 
 function TYookassaGetPaymentRequest.CreateResponse(aRaw: TJSONObject): TYookassaResponse;
@@ -405,18 +401,18 @@ end;
 
 function TYookassaCreateReceiptRequest.GetEndpoint: string;
 begin
-  Result := FApiBaseUrl + '/receipts';
+  Result := FApiBaseUrl + _ENDPOINT_RECEIPTS;
 end;
 
 function TYookassaCreateReceiptRequest.GetMethod: string;
 begin
-  Result := 'POST';
+  Result := _HTTP_METHOD_POST;
 end;
 
 constructor TYookassaCreateReceiptRequest.Create;
 begin
   inherited Create;
-  FSend := True; // by default, we send the receipt to the client
+  FSend := _DEFAULT_SEND_RECEIPT; // by default, we send the receipt to the client
   FReceiptType := rtPayment; // by default, the payment receipt
 end;
 
@@ -435,16 +431,16 @@ begin
   Result := TJSONObject.Create;
   try
     EYooKassaValidationError.RaiseIfNil(FReceipt, 'Receipt');
-    EYooKassaValidationError.RaiseIfFalse(FReceipt.Items.Count > 0, 'Receipt must have at least one item');
+    EYooKassaValidationError.RaiseIfFalse(FReceipt.Items.Count > 0, _ERR_RECEIPT_ITEMS_REQUIRED);
 
     if FReceiptType = rtRefund then
       EYooKassaValidationError.RaiseIfFalse((FPaymentId <> EmptyStr) or (FRefundId <> EmptyStr),
-        'For refund receipt, either PaymentId or RefundId must be specified');
+        _ERR_REFUND_ID_REQUIRED);
     // receipt type (payment/refund)
-    Result.Add('type', ReceiptTypeToString(FReceiptType));
+    Result.Add(_JSON_FIELD_TYPE, ReceiptTypeToString(FReceiptType));
 
     // whether to send the receipt
-    Result.Add('send', FSend);
+    Result.Add(_JSON_FIELD_SEND, FSend);
 
     // receipt data
     if Assigned(FReceipt) then
@@ -453,12 +449,12 @@ begin
     // The refund receipt requires a payment_id or a refund_id.
     if FReceiptType = rtRefund then begin
       if FPaymentId <> EmptyStr then
-        Result.Add('payment_id', FPaymentId)
+        Result.Add(_JSON_FIELD_PAYMENT_ID, FPaymentId)
       else if FRefundId <> EmptyStr then
-        Result.Add('refund_id', FRefundId);
+        Result.Add(_JSON_FIELD_REFUND_ID, FRefundId);
     end
     else
-      Result.Add('payment_id', FPaymentId);
+      Result.Add(_JSON_FIELD_PAYMENT_ID, FPaymentId);
 
     // A list of settlings or payments
     if Assigned(FSettlements) and (FSettlements.Count > 0) then
@@ -466,7 +462,7 @@ begin
       aSettlementsArray := TJSONArray.Create;
       for aSettlement in FSettlements do
         aSettlementsArray.Add(aSettlement.ToJSON);
-      Result.Add('settlements', aSettlementsArray);
+      Result.Add(_JSON_FIELD_SETTLEMENTS, aSettlementsArray);
     end;
   except
     FreeAndNil(Result);

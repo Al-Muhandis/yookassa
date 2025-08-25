@@ -196,7 +196,7 @@ var
 implementation
 
 uses
-  base64, yookassa_exceptions
+  base64, yookassa_exceptions, yookassa_constants
   ;
 
 function IsValidBase64(const AStr: string): Boolean;
@@ -216,8 +216,8 @@ end;
 function PaymentModeToString(aPaymentMode: TPaymentMode): String;
 begin
   case aPaymentMode of
-    pmFullPrepayment: Result:='full_prepayment';
-    pmFullPayment:    Result:='full_payment';
+    pmFullPrepayment: Result:=_PAYMENT_MODE_FULL_PREPAYMENT;
+    pmFullPayment:    Result:=_PAYMENT_MODE_FULL_PAYMENT;
   else
     Result:=EmptyStr;
   end;
@@ -226,8 +226,8 @@ end;
 function ReceiptTypeToString(aType: TReceiptType): String;
 begin
   case aType of
-    rtPayment: Result:='payment';
-    rtRefund:  Result:='refund';
+    rtPayment: Result:=_RECEIPT_TYPE_PAYMENT;
+    rtRefund:  Result:=_RECEIPT_TYPE_REFUND;
   else
     Result:=EmptyStr;
   end;
@@ -236,10 +236,10 @@ end;
 function SettlementTypeToString(aSettlementType: TSettlementType): String;
 begin
   case aSettlementType of
-    stCashless:      Result:='cashless';
-    stPrepayment:    Result:='prepayment';
-    stPostpayment:   Result:='postpayment';
-    stConsideration: Result:='consideration';
+    stCashless:      Result:=_SETTLEMENT_TYPE_CASHLESS;
+    stPrepayment:    Result:=_SETTLEMENT_TYPE_PREPAYMENT;
+    stPostpayment:   Result:=_SETTLEMENT_TYPE_POSTPAYMENT;
+    stConsideration: Result:=_SETTLEMENT_TYPE_CONSIDERATION;
   else
     Result:=EmptyStr;
   end;
@@ -257,7 +257,7 @@ end;
 constructor TYookassaReceipt.Create;
 begin
   Items := TReceiptItems.Create(True);
-  FTaxSystemCode := -1; // not specified
+  FTaxSystemCode := _DEFAULT_TAX_SYSTEM_CODE; // not specified
 end;
 
 destructor TYookassaReceipt.Destroy;
@@ -290,17 +290,17 @@ var
 begin
   if Assigned(FCustomer) then
     if (FCustomer.Email <> EmptyStr) or (FCustomer.Phone <> EmptyStr) then
-      aJSON.Add('customer', FCustomer.ToJSON);
+      aJSON.Add(_JSON_FIELD_CUSTOMER, FCustomer.ToJSON);
 
   // items
   aItems := TJSONArray.Create;
   for Item in FItems do
     aItems.Add(Item.ToJSON);
-  aJson.Add('items', aItems);
+  aJson.Add(_JSON_FIELD_ITEMS, aItems);
 
   // tax_system_code
   if FTaxSystemCode >= 0 then
-    aJson.Add('tax_system_code', FTaxSystemCode);
+    aJson.Add(_JSON_FIELD_TAX_SYSTEM_CODE, FTaxSystemCode);
 end;
 
 { TYookassaReceiver }
@@ -320,9 +320,9 @@ end;
 function TYookassaReceiver.GetTypeString: string;
 begin
   case FReceiverType of
-    rtBankAccount: Result := 'bank_account';
-    rtMobileBalance: Result := 'mobile_balance';
-    rtDigitalWallet: Result := 'digital_wallet';
+    rtBankAccount: Result := _RECEIVER_TYPE_BANK_ACCOUNT;
+    rtMobileBalance: Result := _RECEIVER_TYPE_MOBILE_BALANCE;
+    rtDigitalWallet: Result := _RECEIVER_TYPE_DIGITAL_WALLET;
   else
     Result := EmptyStr;
   end;
@@ -332,25 +332,25 @@ function TYookassaReceiver.ToJSON: TJSONObject;
 begin
   Result := TJSONObject.Create;
   try
-    Result.Add('type', GetTypeString);
+    Result.Add(_JSON_FIELD_TYPE, GetTypeString);
 
     case FReceiverType of
       rtBankAccount:
         begin
           EYooKassaValidationError.RaiseIfEmpty(FAccountNumber, 'AccountNumber');
           EYooKassaValidationError.RaiseIfEmpty(FBic, 'Bic');
-          Result.Add('account_number', FAccountNumber);
-          Result.Add('bic', FBic);
+          Result.Add(_JSON_FIELD_ACCOUNT_NUMBER, FAccountNumber);
+          Result.Add(_JSON_FIELD_BIC, FBic);
         end;
       rtMobileBalance:
         begin
           EYooKassaValidationError.RaiseIfEmpty(FPhone, 'Phone');
-          Result.Add('phone', FPhone);
+          Result.Add(_JSON_FIELD_PHONE, FPhone);
         end;
       rtDigitalWallet:
         begin
           EYooKassaValidationError.RaiseIfEmpty(FAccountNumber, 'AccountNumber');
-          Result.Add('account_number', FAccountNumber);
+          Result.Add(_JSON_FIELD_ACCOUNT_NUMBER, FAccountNumber);
         end;
     end;
   except
@@ -364,13 +364,13 @@ end;
 function TYookassaReceiptItem.GetAgentTypeString: string;
 begin
   case FAgentType of
-    atBankingPaymentAgent:    Result := 'banking_payment_agent';
-    atBankingPaymentSubagent: Result := 'banking_payment_subagent';
-    atPaymentAgent:           Result := 'payment_agent';
-    atPaymentSubagent:        Result := 'payment_subagent';
-    atAttorney:               Result := 'attorney';
-    atCommissioner:           Result := 'commissioner';
-    atAgent:                  Result := 'agent';
+    atBankingPaymentAgent:    Result := _AGENT_TYPE_BANKING_PAYMENT_AGENT;
+    atBankingPaymentSubagent: Result := _AGENT_TYPE_BANKING_PAYMENT_SUBAGENT;
+    atPaymentAgent:           Result := _AGENT_TYPE_PAYMENT_AGENT;
+    atPaymentSubagent:        Result := _AGENT_TYPE_PAYMENT_SUBAGENT;
+    atAttorney:               Result := _AGENT_TYPE_ATTORNEY;
+    atCommissioner:           Result := _AGENT_TYPE_COMMISSIONER;
+    atAgent:                  Result := _AGENT_TYPE_AGENT;
   else
     Result := EmptyStr;
   end;
@@ -386,7 +386,7 @@ end;
 constructor TYookassaReceiptItem.Create;
 begin
   inherited Create;
-  MarkMode := -1; // -1 = not specified
+  MarkMode := _DEFAULT_MARK_MODE; // -1 = not specified
 end;
 
 destructor TYookassaReceiptItem.Destroy;
@@ -403,52 +403,53 @@ var
 begin
   Result := TJSONObject.Create;
   try
-    Result.Add('description', Description);
-    Result.Add('quantity', Quantity);
+    Result.Add(_JSON_FIELD_DESCRIPTION, Description);
+    Result.Add(_JSON_FIELD_QUANTITY, Quantity);
     aAmount := TJSONObject.Create;
-    aAmount.Add('value', Format('%.2f', [AmountValue], _FrmtStngsJSON));
-    aAmount.Add('currency', AmountCurrency);
-    Result.Add('amount', aAmount);
-    Result.Add('vat_code', VatCode);
-    if FPaymentMode <> pmNone then Result.Add('payment_mode', PaymentModeToString(FPaymentMode));
-    if PaymentSubject <> EmptyStr then Result.Add('payment_subject', PaymentSubject);
+    aAmount.Add(_JSON_FIELD_VALUE, Format('%.2f', [AmountValue], _FrmtStngsJSON));
+    aAmount.Add(_JSON_FIELD_CURRENCY, AmountCurrency);
+    Result.Add(_JSON_FIELD_AMOUNT, aAmount);
+    Result.Add(_JSON_FIELD_VAT_CODE, VatCode);
+    if FPaymentMode <> pmNone then Result.Add(_JSON_FIELD_PAYMENT_MODE, PaymentModeToString(FPaymentMode));
+    if PaymentSubject <> EmptyStr then Result.Add(_JSON_FIELD_PAYMENT_SUBJECT, PaymentSubject);
     if MarkMode >= 0 then
     begin
-      Result.Add('mark_mode', MarkMode);
+      Result.Add(_JSON_FIELD_MARK_MODE, MarkMode);
 
       // check MarkCodeInfo
       if MarkCodeInfo = EmptyStr then
-        raise EYooKassaValidationError.Create('MarkCodeInfo is required when MarkMode is set');
+        raise EYooKassaValidationError.Create(_ERR_MARK_CODE_REQUIRED);
 
       if not IsValidBase64(MarkCodeInfo) then
-        raise EYooKassaValidationError.Create('MarkCodeInfo is not a valid base64 string');
+        raise EYooKassaValidationError.Create(Format(_ERR_INVALID_BASE64, ['MarkCodeInfo']));
 
       // Optional: length check after decoding
       try
         aMarkCodeBytes := DecodeStringBase64(MarkCodeInfo);
-        if (Length(aMarkCodeBytes) < 30) or (Length(aMarkCodeBytes) > 100) then
-          raise EYooKassaValidationError.Create('MarkCodeInfo has invalid length after decoding (expected 30–100 bytes)');
+        if (Length(aMarkCodeBytes) < _MIN_MARK_CODE_LENGTH) or (Length(aMarkCodeBytes) > _MAX_MARK_CODE_LENGTH) then
+          raise EYooKassaValidationError.Create(
+            Format(_ERR_INVALID_MARK_CODE_LENGTH, ['MarkCodeInfo', _MIN_MARK_CODE_LENGTH, _MAX_MARK_CODE_LENGTH]));
       except
         on E: Exception do
-          raise EYooKassaValidationError.Create('MarkCodeInfo decoding error: ' + E.Message);
+          raise EYooKassaValidationError.Create(Format(_ERR_MARK_CODE_DECODE, [E.Message]));
       end;
 
       // add to JSON
       aMarkCodeInfo := TJSONObject.Create;
-      aMarkCodeInfo.Add('gs_1m', MarkCodeInfo);
-      Result.Add('mark_code_info', aMarkCodeInfo);
+      aMarkCodeInfo.Add(_JSON_FIELD_GS_1M, MarkCodeInfo);
+      Result.Add(_JSON_FIELD_MARK_CODE_INFO, aMarkCodeInfo);
     end;
 
     if Measure <> EmptyStr then
-      Result.Add('measure', Measure);
+      Result.Add(_JSON_FIELD_MEASURE, Measure);
 
     // agent_type (ФФД 1.1)
     aAgentTypeStr := GetAgentTypeString;
     if aAgentTypeStr <> EmptyStr then
-      Result.Add('agent_type', aAgentTypeStr);
+      Result.Add(_JSON_FIELD_AGENT_TYPE, aAgentTypeStr);
 
     if Assigned(FSupplier) then
-      Result.Add('supplier', FSupplier.ToJSON);
+      Result.Add(_JSON_FIELD_SUPPLIER, FSupplier.ToJSON);
 
   except
     FreeAndNil(Result);
@@ -460,7 +461,7 @@ end;
 
 constructor TYookassaSettlement.Create;
 begin
-  FAmountCurrency := 'RUB';
+  FAmountCurrency := _DEFAULT_CURRENCY;
 end;
 
 constructor TYookassaSettlement.Create(aType: TSettlementType; aAmount: Currency; const aCurrency: string);
@@ -478,12 +479,12 @@ begin
   Result := TJSONObject.Create;
   try
     if FType <> stNone then
-      Result.Add('type', SettlementTypeToString(FType));
+      Result.Add(_JSON_FIELD_TYPE, SettlementTypeToString(FType));
 
     aAmount := TJSONObject.Create;
-    aAmount.Add('value', Format('%.2f', [FAmountValue], _FrmtStngsJSON));
-    aAmount.Add('currency', FAmountCurrency);
-    Result.Add('amount', aAmount);
+    aAmount.Add(_JSON_FIELD_VALUE, Format('%.2f', [FAmountValue], _FrmtStngsJSON));
+    aAmount.Add(_JSON_FIELD_CURRENCY, FAmountCurrency);
+    Result.Add(_JSON_FIELD_AMOUNT, aAmount);
   except
     FreeAndNil(Result);
     raise;
@@ -504,9 +505,9 @@ function TYookassaSupplier.ToJSON: TJSONObject;
 begin
   Result := TJSONObject.Create;
   try
-    if FName <> EmptyStr then Result.Add('name', FName);
-    if FPhone <> EmptyStr then Result.Add('phone', FPhone);
-    if FInn <> EmptyStr then Result.Add('inn', FInn);
+    if FName <> EmptyStr then Result.Add(_JSON_FIELD_NAME, FName);
+    if FPhone <> EmptyStr then Result.Add(_JSON_FIELD_PHONE, FPhone);
+    if FInn <> EmptyStr then Result.Add(_JSON_FIELD_INN, FInn);
   except
     FreeAndNil(Result);
     raise;
@@ -520,13 +521,13 @@ begin
   Result := TJSONObject.Create;
   try
     if not FFullName.IsEmpty then
-      Result.Add('full_name', FFullName);
+      Result.Add(_JSON_FIELD_FULL_NAME, FFullName);
     if not FINN.IsEmpty then
-      Result.Add('inn', FINN);
+      Result.Add(_JSON_FIELD_INN, FINN);
     if not FEmail.IsEmpty then
-      Result.Add('email', FEmail);
+      Result.Add(_JSON_FIELD_EMAIL, FEmail);
     if not FPhone.IsEmpty then
-      Result.Add('phone', FPhone);
+      Result.Add(_JSON_FIELD_PHONE, FPhone);
   except
     FreeAndNil(Result);
     raise;

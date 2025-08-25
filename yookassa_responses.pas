@@ -71,17 +71,17 @@ function StringToPaymentStatus(const aPaymentStatus: String): TPaymentStatus;
 implementation
 
 uses
-  opensslsockets
+  opensslsockets, yookassa_constants
   ;
 
 function StringToPaymentStatus(const aPaymentStatus: String): TPaymentStatus;
 begin
   case aPaymentStatus of
-    '':                    Result:=psNone;
-    'pending':             Result:=psPending;
-    'waiting_for_capture': Result:=psWaitingForCapture;
-    'succeeded':           Result:=psSucceeded;
-    'canceled':            Result:=psCanceled;
+    '':                                  Result:=psNone;
+    _PAYMENT_STATUS_PENDING:             Result:=psPending;
+    _PAYMENT_STATUS_WAITING_FOR_CAPTURE: Result:=psWaitingForCapture;
+    _PAYMENT_STATUS_SUCCEEDED:           Result:=psSucceeded;
+    _PAYMENT_STATUS_CANCELED:            Result:=psCanceled;
   else
     Result:=psUnknown;
   end;
@@ -106,18 +106,18 @@ end;
 
 function TYookassaPaymentResponse.GetId: string;
 begin
-  Result := Raw.Get('id', EmptyStr);
+  Result := Raw.Get(_JSON_FIELD_ID, EmptyStr);
 end;
 
 function TYookassaPaymentResponse.GetStatus: TPaymentStatus;
 begin
-  Result := StringToPaymentStatus(Raw.Get('status', EmptyStr));
+  Result := StringToPaymentStatus(Raw.Get(_JSON_FIELD_STATUS, EmptyStr));
 end;
 
 function TYookassaPaymentResponse.GetConfirmationURL: string;
 begin
-  if Assigned(Raw.Find('confirmation')) then
-    Result := Raw.Objects['confirmation'].Get('confirmation_url', EmptyStr)
+  if Assigned(Raw.Find(_JSON_FIELD_CONFIRMATION)) then
+    Result := Raw.Objects[_JSON_FIELD_CONFIRMATION].Get(_JSON_FIELD_CONFIRMATION_URL, EmptyStr)
   else
     Result := EmptyStr;
 end;
@@ -127,31 +127,31 @@ var
   aValueStr: string;
 begin
   Result := 0;
-  aValueStr := Raw.FindPath('amount.value').AsString;
+  aValueStr := Raw.FindPath(_JSON_FIELD_AMOUNT + '.' + _JSON_FIELD_VALUE).AsString;
   if not aValueStr.IsEmpty then
     Result := StrToCurr(aValueStr, _FrmtStngsJSON);
 end;
 
 function TYookassaPaymentResponse.GetCurrency: String;
 begin
-  Result := Raw.FindPath('amount.currency').AsString;
+  Result := Raw.FindPath(_JSON_FIELD_AMOUNT + '.' + _JSON_FIELD_CURRENCY).AsString;
 end;
 
 { TYookassaReceiptResponse }
 
 function TYookassaReceiptResponse.GetPaymentId: String;
 begin
-  Result := Raw.Get('payment_id', EmptyStr);
+  Result := Raw.Get(_JSON_FIELD_PAYMENT_ID, EmptyStr);
 end;
 
 function TYookassaReceiptResponse.GetId: string;
 begin
-  Result := Raw.Get('id', EmptyStr);
+  Result := Raw.Get(_JSON_FIELD_ID, EmptyStr);
 end;
 
 function TYookassaReceiptResponse.GetStatus: string;
 begin
-  Result := Raw.Get('status', EmptyStr);
+  Result := Raw.Get(_JSON_FIELD_STATUS, EmptyStr);
 end;
 
 end.

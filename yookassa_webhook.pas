@@ -120,11 +120,20 @@ function WebhookObjectTypeToString(aObjectType: TYookassaWebhookObjectType): Str
 implementation
 
 uses
-  StrUtils;
+  StrUtils, yookassa_constants
+  ;
 
 const
   _WebhookObjectTypes: array[TYookassaWebhookObjectType] of String =
-    ('', '', 'payment', 'refund', 'payout', 'deal', 'paymentmethod');
+    (
+      '',
+      '',
+      _WEBHOOK_OBJECT_TYPE_PAYMENT,
+      _WEBHOOK_OBJECT_TYPE_REFUND,
+      _WEBHOOK_OBJECT_TYPE_PAYOUT,
+      _WEBHOOK_OBJECT_TYPE_DEAL,
+      _WEBHOOK_OBJECT_TYPE_PAYMENT_METHOD
+    );
 
 function WebhookObjectTypeToString(aObjectType: TYookassaWebhookObjectType): String;
 begin
@@ -143,15 +152,15 @@ end;
 
 function TYookassaWebhookData.DetermineObjectType(const aEvent: string): TYookassaWebhookObjectType;
 begin
-  if StartsStr('payment.', aEvent) then
+  if StartsStr(_WEBHOOK_OBJECT_TYPE_PAYMENT+'.', aEvent) then
     Result := wotPayment
-  else if StartsStr('refund.', aEvent) then
+  else if StartsStr(_WEBHOOK_OBJECT_TYPE_REFUND+'.', aEvent) then
     Result := wotRefund
-  else if StartsStr('payout.', aEvent) then
+  else if StartsStr(_WEBHOOK_OBJECT_TYPE_PAYOUT+'.', aEvent) then
     Result := wotPayout
-  else if StartsStr('deal.', aEvent) then
+  else if StartsStr(_WEBHOOK_OBJECT_TYPE_DEAL+'.', aEvent) then
     Result := wotDeal
-  else if StartsStr('payment_method.', aEvent) then
+  else if StartsStr(_WEBHOOK_OBJECT_TYPE_PAYMENT_METHOD+'.', aEvent) then
     Result := wotPaymentMethod
   else
     Result := wotUnknown;
@@ -180,7 +189,7 @@ var
 begin
   if not Assigned(FPaymentResponse) and (ObjectType = wotPayment) then
   begin
-    aObjectJSON := Raw.Find('object') as TJSONObject;
+    aObjectJSON := Raw.Find(_JSON_FIELD_OBJECT) as TJSONObject;
     if Assigned(aObjectJSON) then
       FPaymentResponse := CreateResponseFromObject(aObjectJSON, wotPayment) as TYookassaPaymentResponse;
   end;
@@ -189,7 +198,7 @@ end;
 
 function TYookassaWebhookData.GetEvent: string;
 begin
-  Result:=Raw.Get('event', '')
+  Result:=Raw.Get(_JSON_FIELD_EVENT, EmptyStr)
 end;
 
 function TYookassaWebhookData.GetObjectType: TYookassaWebhookObjectType;
@@ -231,17 +240,19 @@ begin
     wotPayment:
       begin
         case aEventName of
-          'succeeded': aHandler := FEventHandlers[wotPayment].OnSucceeded;
-          'waiting_for_capture': aHandler := FEventHandlers[wotPayment].OnWaitingForCapture;
-          'canceled': aHandler := FEventHandlers[wotPayment].OnCanceled;
-          else aHandler := nil;
+          _PAYMENT_STATUS_SUCCEEDED:           aHandler := FEventHandlers[wotPayment].OnSucceeded;
+          _PAYMENT_STATUS_WAITING_FOR_CAPTURE: aHandler := FEventHandlers[wotPayment].OnWaitingForCapture;
+          _PAYMENT_STATUS_CANCELED:            aHandler := FEventHandlers[wotPayment].OnCanceled;
+        else
+          aHandler := nil;
         end;
       end;
     wotRefund:
       begin
         case aEventName of
-          'succeeded': aHandler := FEventHandlers[wotRefund].OnSucceeded;
-          else aHandler := nil;
+          _REFUND_STATUS_SUCCEEDED: aHandler := FEventHandlers[wotRefund].OnSucceeded;
+        else
+          aHandler := nil;
         end;
       end;
     { TODO: Add other object types
@@ -255,7 +266,7 @@ begin
 
   if Assigned(aHandler) then
   begin
-    Log(etInfo, Format('Webhook: Triggering handler for %s', [aEvent.Event]));
+    Log(etInfo, Format(_LOG_WEBHOOK_TRIGGERING, [aEvent.Event]));
     aHandler(aEvent);
     Result := True;
   end;
@@ -267,11 +278,11 @@ var
   aData: TYookassaWebhookData;
   aJSONData: TJSONData;
 begin
-  Result := '{"error": "Bad Request"}';
+  Result := _RESPONSE_ERROR_BAD_REQUEST;
   aJSON := nil;
   aData := nil;
 
-  Log(etDebug, 'Webhook: Received raw body: ' + aRawBody);
+  Log(etDebug, Format(_LOG_WEBHOOK_RECEIVED, [aRawBody]));
 
   // 1. Parse JSON
   try
@@ -279,17 +290,17 @@ begin
     if not (aJSONData is TJSONObject) then
     begin
       aJSONData.Free;
-      Log(etError, 'Webhook: Root element is not JSON object');
-      Result := '{"error": "Invalid JSON structure"}';
+      Log(etError, _LOG_WEBHOOK_ROOT_NOT_OBJECT);
+      Result := _RESPONSE_ERROR_INVALID_JSON_STRUCTURE;
       Exit;
     end;
     aJSON := aJSONData as TJSONObject;
-    Log(etDebug, 'Webhook: JSON parsed successfully');
+    Log(etDebug, _LOG_WEBHOOK_JSON_PARSED);
   except
     on E: Exception do
     begin
-      Log(etError, 'Webhook: Invalid JSON - ' + E.Message);
-      Result := '{"error": "Invalid JSON"}';
+      Log(etError, Format(_LOG_WEBHOOK_INVALID_JSON, [E.Message]));
+      Result := _RESPONSE_ERROR_INVALID_JSON;
       Exit;
     end;
   end;
@@ -302,20 +313,20 @@ begin
     on E: Exception do
     begin
       aJSON.Free; // Cleanup JSON if WebhookData creation failed
-      Log(etError, 'Webhook: Data creation failed - ' + E.Message);
-      Result := '{"error": "Data processing error"}';
+      Log(etError, Format(_LOG_WEBHOOK_DATA_FAILED, [E.Message]));
+      Result := _RESPONSE_ERROR_DATA_PROCESSING;
       Exit;
     end;
   end;
   try
-    Log(etInfo, Format('Webhook: Processing event "%s"', [aData.Event]));
+    Log(etInfo, Format(_LOG_WEBHOOK_PROCESSING, [aData.Event]));
 
     // 3. Process event using unified handler system
     if not ProcessWebhookEvent(aData) then
-      Log(etWarning, Format('Webhook: No handler found for event: %s', [aData.Event]));
+      Log(etWarning, Format(_LOG_WEBHOOK_NO_HANDLER, [aData.Event]));
 
     // 4. Return success response
-    Result := '{"status": "ok"}';
+    Result := _RESPONSE_STATUS_OK;
 
   finally
     aData.Free;

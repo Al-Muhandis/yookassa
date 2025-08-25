@@ -115,10 +115,21 @@ type
     property OnLog: TYookassaLogEvent read FOnLog write FOnLog;
   end;
 
+function WebhookObjectTypeToString(aObjectType: TYookassaWebhookObjectType): String;
+
 implementation
 
 uses
   StrUtils;
+
+const
+  _WebhookObjectTypes: array[TYookassaWebhookObjectType] of String =
+    ('', '', 'payment', 'refund', 'payout', 'deal', 'paymentmethod');
+
+function WebhookObjectTypeToString(aObjectType: TYookassaWebhookObjectType): String;
+begin
+  Result:=_WebhookObjectTypes[aObjectType];
+end;
 
 { EYooKassaWebhookError }
 

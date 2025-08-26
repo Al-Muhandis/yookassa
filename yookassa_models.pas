@@ -70,13 +70,14 @@ type
     FName: string;
     FPhone: string;
     FInn: string;
+    procedure SetPhone(const AValue: string);
   public
     constructor Create(const AName, APhone, AInn: string); overload;
     function ToJSON: TJSONObject; override;
     property Name: string read FName write FName;
 { Телефон поставщика (тег в 54 ФЗ — 1171). Указывается в формате ITU-T E.164, например 79000000000.
   Параметр предусмотрен форматом фискальных документов (ФФД) и является обязательным, начиная с версии 1.1. }
-    property Phone: string read FPhone write FPhone;
+    property Phone: string read FPhone write SetPhone;
     property Inn: string read FInn write FInn;
   end;
 
@@ -114,6 +115,7 @@ type
     FFullName: String;
     FINN: String;
     FPhone: String;
+    procedure SetPhone(const AValue: String);
   public
     function ToJSON: TJSONObject; override;
 { Для юрлица — название организации, для ИП и физического лица — ФИО. Если у физлица отсутствует ИНН,
@@ -127,7 +129,7 @@ type
     property Email: String read FEmail write FEmail;
 { Телефон пользователя для отправки чека. Указывается в формате ITU-T E.164, например 79000000000.
   Обязательный параметр, если не передан email }
-    property Phone: String read FPhone write FPhone;
+    property Phone: String read FPhone write SetPhone;
   end;
 
   // Модель чека
@@ -158,6 +160,7 @@ type
     FBic: string;
     FPhone: string;
     function GetTypeString: string;
+    procedure SetPhone(const AValue: string);
   public
     constructor Create; overload;
     constructor Create(aType: TYookassaReceiverType); overload;
@@ -165,7 +168,7 @@ type
     property ReceiverType: TYookassaReceiverType read FReceiverType write FReceiverType;
     property AccountNumber: string read FAccountNumber write FAccountNumber;
     property Bic: string read FBic write FBic;
-    property Phone: string read FPhone write FPhone;
+    property Phone: string read FPhone write SetPhone;
   end;
 
   // Модель расчета
@@ -196,7 +199,7 @@ var
 implementation
 
 uses
-  base64, yookassa_exceptions, yookassa_constants
+  base64, yookassa_exceptions, yookassa_constants, yookassa_validations
   ;
 
 function IsValidBase64(const AStr: string): Boolean;
@@ -326,6 +329,15 @@ begin
   else
     Result := EmptyStr;
   end;
+end;
+
+procedure TYookassaReceiver.SetPhone(const AValue: string);
+var
+  aTempPhone: string;
+begin
+  aTempPhone := AValue;
+  TYookassaPhoneValidator.ValidateAndNormalizePhone(aTempPhone, 'Receiver');
+  FPhone := aTempPhone;
 end;
 
 function TYookassaReceiver.ToJSON: TJSONObject;
@@ -493,6 +505,15 @@ end;
 
 { TYookassaSupplier }
 
+procedure TYookassaSupplier.SetPhone(const AValue: string);
+var
+  aTempPhone: string;
+begin
+  aTempPhone := AValue;
+  TYookassaPhoneValidator.ValidateAndNormalizePhone(aTempPhone, 'Supplier');
+  FPhone := aTempPhone;
+end;
+
 constructor TYookassaSupplier.Create(const AName, APhone, AInn: string);
 begin
   Create;
@@ -515,6 +536,15 @@ begin
 end;
 
 { TYookassaUser }
+
+procedure TYookassaUser.SetPhone(const AValue: String);
+var
+  aTempPhone: string;
+begin
+  aTempPhone := AValue;
+  TYookassaPhoneValidator.ValidateAndNormalizePhone(aTempPhone, 'Customer');
+  FPhone := aTempPhone;
+end;
 
 function TYookassaUser.ToJSON: TJSONObject;
 begin

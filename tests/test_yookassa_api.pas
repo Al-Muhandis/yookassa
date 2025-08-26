@@ -73,6 +73,7 @@ type
     procedure TestSupplier_InReceiptItemToJSON;
     procedure TestLogging;
     procedure TestMarkCodeInfoValidation;
+    procedure TestPhoneValidation;
   end;
 
 implementation
@@ -395,7 +396,7 @@ begin
       AssertTrue(aJSON.Find('customer') <> nil);
       aCustomer := TJSONObject(aJSON.Objects['customer']);
       AssertEquals('user@example.com', aCustomer.Strings['email']);
-      AssertEquals('+79001234567', aCustomer.Strings['phone']);
+      AssertEquals('79001234567', aCustomer.Strings['phone']);
     finally
       aJSON.Free;
     end;
@@ -670,7 +671,7 @@ begin
 
     // Fill Supplier (must be created automatically)
     aItem.Supplier.Name := 'ООО "Ромашка"';
-    aItem.Supplier.Phone := '+74951234567';
+    aItem.Supplier.Phone := '74951234567'; // Указывается в формате ITU-T E.164, например 79000000000
     aItem.Supplier.Inn := '7701234567';
 
     // Stream to JSON
@@ -681,7 +682,7 @@ begin
 
       aSupplierJSON := aJSON.Objects['supplier'];
       AssertEquals('Supplier name must match', 'ООО "Ромашка"', aSupplierJSON.Get('name', ''));
-      AssertEquals('Supplier phone must match', '+74951234567', aSupplierJSON.Get('phone', ''));
+      AssertEquals('Supplier phone must match', '74951234567', aSupplierJSON.Get('phone', ''));
       AssertEquals('Supplier INN must match', '7701234567', aSupplierJSON.Get('inn', ''));
     finally
       aJSON.Free;
@@ -778,6 +779,43 @@ begin
     end;
   finally
     aItem.Free;
+  end;
+end;
+
+procedure TTestYooKassa.TestPhoneValidation;
+var
+  User: TYookassaUser;
+begin
+  User := TYookassaUser.Create;
+  try
+    // Валидные форматы
+    User.Phone := '+7 (900) 123-45-67';
+    AssertEquals('79001234567', User.Phone);
+
+    User.Phone := '8 900 123 45 67';
+    AssertEquals('79001234567', User.Phone);
+
+    User.Phone := '+79001234567';
+    AssertEquals('79001234567', User.Phone);
+
+    User.Phone := '79001234567';
+    AssertEquals('79001234567', User.Phone);
+
+    // Пустой номер должен работать
+    User.Phone := '';
+    AssertEquals('', User.Phone);
+
+    // Невалидный номер должен вызывать исключение
+    try
+      User.Phone := '123'; // Слишком короткий
+      Fail('Should raise validation error');
+    except
+      on EYooKassaValidationError do
+        ; // Expected
+    end;
+
+  finally
+    User.Free;
   end;
 end;
 

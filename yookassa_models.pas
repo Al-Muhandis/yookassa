@@ -115,6 +115,7 @@ type
     FFullName: String;
     FINN: String;
     FPhone: String;
+    procedure SetEmail(const AValue: String);
     procedure SetPhone(const AValue: String);
   public
     function ToJSON: TJSONObject; override;
@@ -126,7 +127,7 @@ type
     property INN: String read FINN write FINN;
 { Электронная почта пользователя для отправки чека. Обязательный параметр, если используете Чеки от ЮKassa
   или если используете другое решение (стороннюю онлайн-кассу, чеки самозанятых) и не передаете phone. }
-    property Email: String read FEmail write FEmail;
+    property Email: String read FEmail write SetEmail;
 { Телефон пользователя для отправки чека. Указывается в формате ITU-T E.164, например 79000000000.
   Обязательный параметр, если не передан email }
     property Phone: String read FPhone write SetPhone;
@@ -544,6 +545,15 @@ begin
   aTempPhone := AValue;
   TYookassaPhoneValidator.ValidateAndNormalizePhone(aTempPhone, 'Customer');
   FPhone := aTempPhone;
+end;
+
+procedure TYookassaUser.SetEmail(const AValue: String);
+var
+  aTempEmail: string;
+begin
+  aTempEmail := AValue;
+  TYookassaEmailValidator.ValidateAndNormalizeEmail(aTempEmail, 'Customer');
+  FEmail := aTempEmail;
 end;
 
 function TYookassaUser.ToJSON: TJSONObject;

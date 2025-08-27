@@ -185,6 +185,12 @@ const
   _ERR_REFUND_ID_REQUIRED = 'For refund receipt, either PaymentId or RefundId must be specified';
   _ERR_HTTP_METHOD_NOT_SUPPORTED = 'HTTP method not supported: %s';
   _ERR_INVALID_PHONE_FORMAT = '%s "%s" is not in valid ITU-T E.164 format. Expected format: 79001234567';
+  _ERR_INVALID_EMAIL_FORMAT = '%s "%s" is not in valid email format. Expected format: user@example.com';
+
+  // Validation Limits для email (НОВОЕ)
+  _MAX_EMAIL_LENGTH = 254;
+  _MAX_LOCAL_PART_LENGTH = 64;
+  _MAX_DOMAIN_PART_LENGTH = 253;
 
   // Response Messages
   _RESPONSE_STATUS_OK = '{"status": "ok"}';

@@ -74,6 +74,8 @@ type
     procedure TestLogging;
     procedure TestMarkCodeInfoValidation;
     procedure TestPhoneValidation;
+    procedure TestEmailValidation;
+    procedure TestEmailAndPhoneValidationTogether;
   end;
 
 implementation
@@ -812,6 +814,163 @@ begin
     except
       on EYooKassaValidationError do
         ; // Expected
+    end;
+
+  finally
+    User.Free;
+  end;
+end;
+
+procedure TTestYooKassa.TestEmailValidation;
+var
+  User: TYookassaUser;
+begin
+  User := TYookassaUser.Create;
+  try
+    // Валидные форматы email с нормализацией
+    User.Email := 'User@Example.Com';
+    AssertEquals('user@example.com', User.Email);
+
+    User.Email := 'user_name@sub.domain.org';
+    AssertEquals('user_name@sub.domain.org', User.Email);
+
+    User.Email := 'test-email@domain-name.com';
+    AssertEquals('test-email@domain-name.com', User.Email);
+
+    // Пустой email должен работать
+    User.Email := '';
+    AssertEquals('', User.Email);
+
+    // Невалидные email должны вызывать исключение
+    try
+      User.Email := 'invalid-email'; // Нет @
+      Fail('Should raise validation error for missing @');
+    except
+      on EYooKassaValidationError do
+        ; // Expected
+    end;
+
+    try
+      User.Email := 'user@@domain.com'; // Двойной @
+      Fail('Should raise validation error for double @');
+    except
+      on EYooKassaValidationError do
+        ; // Expected
+    end;
+
+    try
+      User.Email := '@domain.com'; // Нет локальной части
+      Fail('Should raise validation error for missing local part');
+    except
+      on EYooKassaValidationError do
+        ; // Expected
+    end;
+
+    try
+      User.Email := 'user@'; // Нет доменной части
+      Fail('Should raise validation error for missing domain');
+    except
+      on EYooKassaValidationError do
+        ; // Expected
+    end;
+
+    try
+      User.Email := 'user@domain'; // Нет TLD
+      Fail('Should raise validation error for missing TLD');
+    except
+      on EYooKassaValidationError do
+        ; // Expected
+    end;
+
+    try
+      User.Email := '.user@domain.com'; // Локальная часть начинается с точки
+      Fail('Should raise validation error for local part starting with dot');
+    except
+      on EYooKassaValidationError do
+        ; // Expected
+    end;
+
+    try
+      User.Email := 'user.@domain.com'; // Локальная часть заканчивается точкой
+      Fail('Should raise validation error for local part ending with dot');
+    except
+      on EYooKassaValidationError do
+        ; // Expected
+    end;
+
+    try
+      User.Email := 'user@.domain.com'; // Домен начинается с точки
+      Fail('Should raise validation error for domain starting with dot');
+    except
+      on EYooKassaValidationError do
+        ; // Expected
+    end;
+
+    try
+      User.Email := 'user@domain.com.'; // Домен заканчивается точкой
+      Fail('Should raise validation error for domain ending with dot');
+    except
+      on EYooKassaValidationError do
+        ; // Expected
+    end;
+
+    try
+      User.Email := 'user with spaces@domain.com'; // Пробелы в локальной части
+      Fail('Should raise validation error for spaces in local part');
+    except
+      on EYooKassaValidationError do
+        ; // Expected
+    end;
+
+    try
+      User.Email := 'user@domain with spaces.com'; // Пробелы в домене
+      Fail('Should raise validation error for spaces in domain');
+    except
+      on EYooKassaValidationError do
+        ; // Expected
+    end;
+
+  finally
+    User.Free;
+  end;
+end;
+
+procedure TTestYooKassa.TestEmailAndPhoneValidationTogether;
+var
+  User: TYookassaUser;
+  Receipt: TYookassaReceipt;
+  JSON: TJSONObject;
+begin
+  // Тестируем совместное использование валидации email и phone
+  User := TYookassaUser.Create;
+  try
+    // Валидация и нормализация обоих полей
+    User.Email := 'TEST.User@EXAMPLE.COM';
+    User.Phone := '+7 (900) 123-45-67';
+
+    AssertEquals('test.user@example.com', User.Email);
+    AssertEquals('79001234567', User.Phone);
+
+    // Тест в составе чека
+    Receipt := TYookassaReceipt.Create;
+    try
+      Receipt.Customer.Email := '  Customer@TEST.RU  ';
+      Receipt.Customer.Phone := '8-900-123-45-67';
+
+      AssertEquals('customer@test.ru', Receipt.Customer.Email);
+      AssertEquals('79001234567', Receipt.Customer.Phone);
+
+      // Проверяем что в JSON попадают нормализованные значения
+      JSON := Receipt.ToJSON;
+      try
+        AssertEquals('customer@test.ru', JSON.Objects['customer'].Get('email', ''));
+        AssertEquals('79001234567', JSON.Objects['customer'].Get('phone', ''));
+      finally
+        JSON.Free;
+      end;
+
+    finally
+      Receipt.Free;
     end;
 
   finally

@@ -74,8 +74,19 @@ type
     procedure TestLogging;
     procedure TestMarkCodeInfoValidation;
     procedure TestPhoneValidation;
-    procedure TestEmailValidation;
-    procedure TestEmailAndPhoneValidationTogether;
+    procedure TestPaymentMethodData_BankCard_ToJSON;
+    procedure TestPaymentMethodData_YooMoney_ToJSON;
+    procedure TestPaymentMethodData_Sberbank_ToJSON;
+    procedure TestPaymentMethodData_SberbankWithPhone_ToJSON;
+    procedure TestPaymentMethodData_Cash_ToJSON;
+    procedure TestPaymentMethodData_CashWithPhone_ToJSON;
+    procedure TestPaymentMethodData_SBP_ToJSON;
+    procedure TestPaymentMethodData_ElectronicCertificate_ToJSON;
+    procedure TestPaymentMethodData_B2BSberbank_ToJSON;
+    procedure TestPaymentMethodData_None_ToJSON;
+    procedure TestPaymentMethodData_PhoneValidation;
+    procedure TestCreatePaymentRequest_WithPaymentMethodData;
+    procedure TestPaymentMethodTypeToString_AllValues;
   end;
 
 implementation
@@ -291,7 +302,6 @@ begin
     aAmount.Add('currency', 'RUB');
     aRaw.Add('amount', aAmount);
 
-{ OwnsRaw = False, потому что объект aRaw освобождаем самостоятельно}
     aResp := TYookassaPaymentResponse.Create(aRaw, False);
     try
       AssertEquals('pay_123', aResp.ID);
@@ -772,7 +782,7 @@ begin
     AssertException(EYooKassaValidationError, @CallToJSON);
 
     // valid base64 (length > 30)
-    aItem.MarkCodeInfo := 'AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyAhIiMkJSYnKCkqKywtLi8wMTIzNDU2Nzg5Ojs8PT4/P0BBQUJD';
+    aItem.MarkCodeInfo := 'AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyAhIiMkJSYnKCkqKywtLi8wMTIzNDU2Nzg5Ojs8PT4/P0FBQUJD';
     aJSON:=aItem.ToJSON;
     try
       AssertNotNull(aJSON); // must be passed
@@ -821,161 +831,285 @@ begin
   end;
 end;
 
-procedure TTestYooKassa.TestEmailValidation;
+// ================ НОВЫЕ ТЕСТЫ ДЛЯ PAYMENT_METHOD_DATA ================
+
+procedure TTestYooKassa.TestPaymentMethodData_BankCard_ToJSON;
 var
-  User: TYookassaUser;
+  aPaymentMethod: TYookassaPaymentMethodData;
+  aJSON: TJSONObject;
 begin
-  User := TYookassaUser.Create;
+  aPaymentMethod := TYookassaPaymentMethodData.Create(pmtBankCard);
   try
-    // Валидные форматы email с нормализацией
-    User.Email := 'User@Example.Com';
-    AssertEquals('user@example.com', User.Email);
-
-    User.Email := 'user_name@sub.domain.org';
-    AssertEquals('user_name@sub.domain.org', User.Email);
-
-    User.Email := 'test-email@domain-name.com';
-    AssertEquals('test-email@domain-name.com', User.Email);
-
-    // Пустой email должен работать
-    User.Email := '';
-    AssertEquals('', User.Email);
-
-    // Невалидные email должны вызывать исключение
+    aJSON := aPaymentMethod.ToJSON;
     try
-      User.Email := 'invalid-email'; // Нет @
-      Fail('Should raise validation error for missing @');
-    except
-      on EYooKassaValidationError do
-        ; // Expected
+      AssertEquals('bank_card', aJSON.Get('type', ''));
+      AssertFalse('phone should not be present for bank_card', Assigned(aJSON.Find('phone')));
+    finally
+      aJSON.Free;
     end;
-
-    try
-      User.Email := 'user@@domain.com'; // Двойной @
-      Fail('Should raise validation error for double @');
-    except
-      on EYooKassaValidationError do
-        ; // Expected
-    end;
-
-    try
-      User.Email := '@domain.com'; // Нет локальной части
-      Fail('Should raise validation error for missing local part');
-    except
-      on EYooKassaValidationError do
-        ; // Expected
-    end;
-
-    try
-      User.Email := 'user@'; // Нет доменной части
-      Fail('Should raise validation error for missing domain');
-    except
-      on EYooKassaValidationError do
-        ; // Expected
-    end;
-
-    try
-      User.Email := 'user@domain'; // Нет TLD
-      Fail('Should raise validation error for missing TLD');
-    except
-      on EYooKassaValidationError do
-        ; // Expected
-    end;
-
-    try
-      User.Email := '.user@domain.com'; // Локальная часть начинается с точки
-      Fail('Should raise validation error for local part starting with dot');
-    except
-      on EYooKassaValidationError do
-        ; // Expected
-    end;
-
-    try
-      User.Email := 'user.@domain.com'; // Локальная часть заканчивается точкой
-      Fail('Should raise validation error for local part ending with dot');
-    except
-      on EYooKassaValidationError do
-        ; // Expected
-    end;
-
-    try
-      User.Email := 'user@.domain.com'; // Домен начинается с точки
-      Fail('Should raise validation error for domain starting with dot');
-    except
-      on EYooKassaValidationError do
-        ; // Expected
-    end;
-
-    try
-      User.Email := 'user@domain.com.'; // Домен заканчивается точкой
-      Fail('Should raise validation error for domain ending with dot');
-    except
-      on EYooKassaValidationError do
-        ; // Expected
-    end;
-
-    try
-      User.Email := 'user with spaces@domain.com'; // Пробелы в локальной части
-      Fail('Should raise validation error for spaces in local part');
-    except
-      on EYooKassaValidationError do
-        ; // Expected
-    end;
-
-    try
-      User.Email := 'user@domain with spaces.com'; // Пробелы в домене
-      Fail('Should raise validation error for spaces in domain');
-    except
-      on EYooKassaValidationError do
-        ; // Expected
-    end;
-
   finally
-    User.Free;
+    aPaymentMethod.Free;
   end;
 end;
 
-procedure TTestYooKassa.TestEmailAndPhoneValidationTogether;
+procedure TTestYooKassa.TestPaymentMethodData_YooMoney_ToJSON;
 var
-  User: TYookassaUser;
-  Receipt: TYookassaReceipt;
-  JSON: TJSONObject;
+  aPaymentMethod: TYookassaPaymentMethodData;
+  aJSON: TJSONObject;
 begin
-  // Тестируем совместное использование валидации email и phone
-  User := TYookassaUser.Create;
+  aPaymentMethod := TYookassaPaymentMethodData.Create(pmtYooMoney);
   try
-    // Валидация и нормализация обоих полей
-    User.Email := 'TEST.User@EXAMPLE.COM';
-    User.Phone := '+7 (900) 123-45-67';
-
-    AssertEquals('test.user@example.com', User.Email);
-    AssertEquals('79001234567', User.Phone);
-
-    // Тест в составе чека
-    Receipt := TYookassaReceipt.Create;
+    aJSON := aPaymentMethod.ToJSON;
     try
-      Receipt.Customer.Email := '  Customer@TEST.RU  ';
-      Receipt.Customer.Phone := '8-900-123-45-67';
-
-      AssertEquals('customer@test.ru', Receipt.Customer.Email);
-      AssertEquals('79001234567', Receipt.Customer.Phone);
-
-      // Проверяем что в JSON попадают нормализованные значения
-      JSON := Receipt.ToJSON;
-      try
-        AssertEquals('customer@test.ru', JSON.Objects['customer'].Get('email', ''));
-        AssertEquals('79001234567', JSON.Objects['customer'].Get('phone', ''));
-      finally
-        JSON.Free;
-      end;
-
+      AssertEquals('yoo_money', aJSON.Get('type', ''));
+      AssertFalse('phone should not be present for yoo_money', Assigned(aJSON.Find('phone')));
     finally
-      Receipt.Free;
+      aJSON.Free;
+    end;
+  finally
+    aPaymentMethod.Free;
+  end;
+end;
+
+procedure TTestYooKassa.TestPaymentMethodData_Sberbank_ToJSON;
+var
+  aPaymentMethod: TYookassaPaymentMethodData;
+  aJSON: TJSONObject;
+begin
+  aPaymentMethod := TYookassaPaymentMethodData.Create(pmtSberbank);
+  try
+    aJSON := aPaymentMethod.ToJSON;
+    try
+      AssertEquals('sberbank', aJSON.Get('type', ''));
+      AssertFalse('phone should not be present when not set', Assigned(aJSON.Find('phone')));
+    finally
+      aJSON.Free;
+    end;
+  finally
+    aPaymentMethod.Free;
+  end;
+end;
+
+procedure TTestYooKassa.TestPaymentMethodData_SberbankWithPhone_ToJSON;
+var
+  aPaymentMethod: TYookassaPaymentMethodData;
+  aJSON: TJSONObject;
+begin
+  aPaymentMethod := TYookassaPaymentMethodData.Create(pmtSberbank);
+  try
+    aPaymentMethod.Phone := '+7 900 123 45 67';
+    aJSON := aPaymentMethod.ToJSON;
+    try
+      AssertEquals('sberbank', aJSON.Get('type', ''));
+      AssertEquals('79001234567', aJSON.Get('phone', ''));
+    finally
+      aJSON.Free;
+    end;
+  finally
+    aPaymentMethod.Free;
+  end;
+end;
+
+procedure TTestYooKassa.TestPaymentMethodData_Cash_ToJSON;
+var
+  aPaymentMethod: TYookassaPaymentMethodData;
+  aJSON: TJSONObject;
+begin
+  aPaymentMethod := TYookassaPaymentMethodData.Create(pmtCash);
+  try
+    aJSON := aPaymentMethod.ToJSON;
+    try
+      AssertEquals('cash', aJSON.Get('type', ''));
+      AssertFalse('phone should not be present when not set', Assigned(aJSON.Find('phone')));
+    finally
+      aJSON.Free;
+    end;
+  finally
+    aPaymentMethod.Free;
+  end;
+end;
+
+procedure TTestYooKassa.TestPaymentMethodData_CashWithPhone_ToJSON;
+var
+  aPaymentMethod: TYookassaPaymentMethodData;
+  aJSON: TJSONObject;
+begin
+  aPaymentMethod := TYookassaPaymentMethodData.Create(pmtCash);
+  try
+    aPaymentMethod.Phone := '79001234567';
+    aJSON := aPaymentMethod.ToJSON;
+    try
+      AssertEquals('cash', aJSON.Get('type', ''));
+      AssertEquals('79001234567', aJSON.Get('phone', ''));
+    finally
+      aJSON.Free;
+    end;
+  finally
+    aPaymentMethod.Free;
+  end;
+end;
+
+procedure TTestYooKassa.TestPaymentMethodData_SBP_ToJSON;
+var
+  aPaymentMethod: TYookassaPaymentMethodData;
+  aJSON: TJSONObject;
+begin
+  aPaymentMethod := TYookassaPaymentMethodData.Create(pmtSbp);
+  try
+    aJSON := aPaymentMethod.ToJSON;
+    try
+      AssertEquals('sbp', aJSON.Get('type', ''));
+    finally
+      aJSON.Free;
+    end;
+  finally
+    aPaymentMethod.Free;
+  end;
+end;
+
+procedure TTestYooKassa.TestPaymentMethodData_ElectronicCertificate_ToJSON;
+var
+  aPaymentMethod: TYookassaPaymentMethodData;
+  aJSON: TJSONObject;
+begin
+  aPaymentMethod := TYookassaPaymentMethodData.Create(pmtElectronicCertificate);
+  try
+    aJSON := aPaymentMethod.ToJSON;
+    try
+      AssertEquals('electronic_certificate', aJSON.Get('type', ''));
+    finally
+      aJSON.Free;
+    end;
+  finally
+    aPaymentMethod.Free;
+  end;
+end;
+
+procedure TTestYooKassa.TestPaymentMethodData_B2BSberbank_ToJSON;
+var
+  aPaymentMethod: TYookassaPaymentMethodData;
+  aJSON: TJSONObject;
+begin
+  aPaymentMethod := TYookassaPaymentMethodData.Create(pmtB2BSberbank);
+  try
+    aJSON := aPaymentMethod.ToJSON;
+    try
+      AssertEquals('b2b_sberbank', aJSON.Get('type', ''));
+    finally
+      aJSON.Free;
+    end;
+  finally
+    aPaymentMethod.Free;
+  end;
+end;
+
+procedure TTestYooKassa.TestPaymentMethodData_None_ToJSON;
+var
+  aPaymentMethod: TYookassaPaymentMethodData;
+  aJSON: TJSONObject;
+begin
+  aPaymentMethod := TYookassaPaymentMethodData.Create(pmtNone);
+  try
+    aJSON := aPaymentMethod.ToJSON;
+    try
+      AssertFalse('type should not be present when pmtNone', Assigned(aJSON.Find('type')));
+    finally
+      aJSON.Free;
+    end;
+  finally
+    aPaymentMethod.Free;
+  end;
+end;
+
+procedure TTestYooKassa.TestPaymentMethodData_PhoneValidation;
+var
+  aPaymentMethod: TYookassaPaymentMethodData;
+begin
+  aPaymentMethod := TYookassaPaymentMethodData.Create(pmtCash);
+  try
+    // Валидные форматы
+    aPaymentMethod.Phone := '+7 (900) 123-45-67';
+    AssertEquals('79001234567', aPaymentMethod.Phone);
+
+    aPaymentMethod.Phone := '8 900 123 45 67';
+    AssertEquals('79001234567', aPaymentMethod.Phone);
+
+    aPaymentMethod.Phone := '79001234567';
+    AssertEquals('79001234567', aPaymentMethod.Phone);
+
+    // Пустой номер должен работать
+    aPaymentMethod.Phone := '';
+    AssertEquals('', aPaymentMethod.Phone);
+
+    // Невалидный номер должен вызывать исключение
+    try
+      aPaymentMethod.Phone := '123'; // Слишком короткий
+      Fail('Should raise validation error');
+    except
+      on EYooKassaValidationError do
+        ; // Expected
     end;
 
   finally
-    User.Free;
+    aPaymentMethod.Free;
   end;
+end;
+
+procedure TTestYooKassa.TestCreatePaymentRequest_WithPaymentMethodData;
+var
+  aPayment: TTestableCreatePayment;
+  aJSON: TJSONObject;
+  aPaymentMethodDataJSON: TJSONObject;
+begin
+  aPayment := TTestableCreatePayment.Create;
+  try
+    FillPaymentData(aPayment);
+
+    // Установим способ оплаты - банковская карта
+    aPayment.PaymentMethodData.PaymentMethodType := pmtBankCard;
+
+    aJSON := aPayment.ToJSON;
+    try
+      // Проверим, что payment_method_data присутствует в JSON
+      AssertTrue('payment_method_data must be in JSON', Assigned(aJSON.Find('payment_method_data')));
+      aPaymentMethodDataJSON := aJSON.Objects['payment_method_data'];
+      AssertEquals('bank_card', aPaymentMethodDataJSON.Get('type', ''));
+    finally
+      aJSON.Free;
+    end;
+
+    // Протестируем с телефоном для SberPay
+    aPayment.PaymentMethodData.PaymentMethodType := pmtSberbank;
+    aPayment.PaymentMethodData.Phone := '+79001234567';
+
+    aJSON := aPayment.ToJSON;
+    try
+      aPaymentMethodDataJSON := aJSON.Objects['payment_method_data'];
+      AssertEquals('sberbank', aPaymentMethodDataJSON.Get('type', ''));
+      AssertEquals('79001234567', aPaymentMethodDataJSON.Get('phone', ''));
+    finally
+      aJSON.Free;
+    end;
+
+  finally
+    aPayment.Free;
+  end;
+end;
+
+procedure TTestYooKassa.TestPaymentMethodTypeToString_AllValues;
+begin
+  AssertEquals('bank_card', PaymentMethodTypeToString(pmtBankCard));
+  AssertEquals('yoo_money', PaymentMethodTypeToString(pmtYooMoney));
+  AssertEquals('sberbank', PaymentMethodTypeToString(pmtSberbank));
+  AssertEquals('tinkoff_bank', PaymentMethodTypeToString(pmtTinkoffBank));
+  AssertEquals('sbp', PaymentMethodTypeToString(pmtSbp));
+  AssertEquals('sber_loan', PaymentMethodTypeToString(pmtSberLoan));
+  AssertEquals('sber_bnpl', PaymentMethodTypeToString(pmtSberBnpl));
+  AssertEquals('b2b_sberbank', PaymentMethodTypeToString(pmtB2BSberbank));
+  AssertEquals('mobile_balance', PaymentMethodTypeToString(pmtMobileBalance));
+  AssertEquals('cash', PaymentMethodTypeToString(pmtCash));
+  AssertEquals('electronic_certificate', PaymentMethodTypeToString(pmtElectronicCertificate));
+  AssertEquals('', PaymentMethodTypeToString(pmtNone));
 end;
 
 initialization

@@ -50,10 +50,12 @@ type
     FReturnUrl: string;
     FReceipt: TYookassaReceipt;
     FReceiver: TYookassaReceiver;
+    FPaymentMethodData: TYookassaPaymentMethodData;
     function BuildAmountJSON: TJSONObject;
     function BuildConfirmationJSON: TJSONObject;
     function BuildMetadataJSON: TJSONObject;
     function GetReceiver: TYookassaReceiver;
+    function GetPaymentMethodData: TYookassaPaymentMethodData;
   protected
     function CreateResponse(aRaw: TJSONObject): TYookassaResponse; override;
     function GetEndpoint: string; override;
@@ -68,6 +70,7 @@ type
     property ReturnUrl: string read FReturnUrl write FReturnUrl;
     property Receipt: TYookassaReceipt read FReceipt write FReceipt;
     property MetaOrderId: string read FMetaOrderId write FMetaOrderId;
+    property PaymentMethodData: TYookassaPaymentMethodData read GetPaymentMethodData;
     class function CreatePayment(const aShopId, aSecretKey: string; aAmount: Currency; const aCurrency, aDescription,
       aReturnUrl: string): TYookassaPaymentResponse;
   end;
@@ -283,6 +286,13 @@ begin
   Result := FReceiver;
 end;
 
+function TYookassaCreatePaymentRequest.GetPaymentMethodData: TYookassaPaymentMethodData;
+begin
+  if not Assigned(FPaymentMethodData) then
+    FPaymentMethodData := TYookassaPaymentMethodData.Create(pmtNone);
+  Result := FPaymentMethodData;
+end;
+
 function TYookassaCreatePaymentRequest.CreateResponse(aRaw: TJSONObject): TYookassaResponse;
 begin
   Result := TYookassaPaymentResponse.Create(aRaw, True);
@@ -322,6 +332,7 @@ destructor TYookassaCreatePaymentRequest.Destroy;
 begin
   FReceiver.Free;
   FReceipt.Free;
+  FPaymentMethodData.Free;
   inherited Destroy;
 end;
 
@@ -344,6 +355,9 @@ begin
     // receiver (for payout to bank, phone, wallet)
     if Assigned(FReceiver) then
       Result.Add(_JSON_FIELD_RECEIVER, FReceiver.ToJSON);
+    // payment_method_data (способ оплаты)
+    if Assigned(FPaymentMethodData) and (FPaymentMethodData.PaymentMethodType <> pmtNone) then
+      Result.Add(_JSON_FIELD_PAYMENT_METHOD_DATA, FPaymentMethodData.ToJSON);
   except
     FreeAndNil(Result);
     raise;

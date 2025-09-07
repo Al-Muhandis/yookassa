@@ -27,6 +27,19 @@ const
   ENDPOINT_DEALS = '/deals';
   ENDPOINT_PAYMENT_METHODS = '/payment_methods';    }
 
+  // Payment Method Types (payment_method_data.type)
+  _PAYMENT_METHOD_TYPE_BANK_CARD = 'bank_card';
+  _PAYMENT_METHOD_TYPE_YOO_MONEY = 'yoo_money';
+  _PAYMENT_METHOD_TYPE_SBERBANK = 'sberbank';
+  _PAYMENT_METHOD_TYPE_TINKOFF_BANK = 'tinkoff_bank';
+  _PAYMENT_METHOD_TYPE_SBP = 'sbp';
+  _PAYMENT_METHOD_TYPE_SBER_LOAN = 'sber_loan';
+  _PAYMENT_METHOD_TYPE_SBER_BNPL = 'sber_bnpl';
+  _PAYMENT_METHOD_TYPE_B2B_SBERBANK = 'b2b_sberbank';
+  _PAYMENT_METHOD_TYPE_MOBILE_BALANCE = 'mobile_balance';
+  _PAYMENT_METHOD_TYPE_CASH = 'cash';
+  _PAYMENT_METHOD_TYPE_ELECTRONIC_CERTIFICATE = 'electronic_certificate';
+
   // Payment Statuses
   _PAYMENT_STATUS_PENDING = 'pending';
   _PAYMENT_STATUS_WAITING_FOR_CAPTURE = 'waiting_for_capture';
@@ -175,6 +188,7 @@ const
   _JSON_FIELD_BIC = 'bic';
   _JSON_FIELD_METADATA = 'metadata';
   _JSON_FIELD_ORDER_ID = 'order_id';
+  _JSON_FIELD_PAYMENT_METHOD_DATA = 'payment_method_data';
 
   // Error Messages
   _ERR_INVALID_BASE64 = '%s is not a valid base64 string';

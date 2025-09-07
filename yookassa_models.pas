@@ -29,6 +29,22 @@ type
     pmFullPayment       // Полный расчет
   );
 
+  { Способы оплаты в payment_method_data }
+  TPaymentMethodType = (
+    pmtNone,                   // Не указан
+    pmtBankCard,               // bank_card - банковские карты
+    pmtYooMoney,               // yoo_money - YooMoney кошелек
+    pmtSberbank,               // sberbank - SberPay/SberBank Online
+    pmtTinkoffBank,            // Оплата в приложении Т-Банка      
+    pmtSbp,                    // sbp - Система быстрых платежей (СБП)
+    pmtSberLoan,
+    pmtSberBnpl,               // Плати частями - BNPL-сервисы            
+    pmtB2BSberbank,            // b2b_sberbank - SberBank Business Online
+    pmtMobileBalance,          // Оплата с баланса мобильного телефона       
+    pmtCash,                   // cash - наличные через терминалы
+    pmtElectronicCertificate  // electronic_certificate - электронный сертификат
+  );
+
   { TYookassaReceiverType }
   TYookassaReceiverType = (
     rtUnknown,
@@ -51,7 +67,7 @@ type
     stConsideration     // Встречное предоставление
   );
 
-  TYookassaReceiptItem = class; 
+  TYookassaReceiptItem = class;
   TYookassaSettlement = class;
 
   // Collections
@@ -63,6 +79,21 @@ type
     function ToJSON: TJSONObject; virtual; abstract;
   end;
 
+  { Модель способа оплаты }
+  TYookassaPaymentMethodData = class(TYookassaAPIObject)
+  private
+    FPaymentMethodType: TPaymentMethodType;
+    FPhone: string; // для cash и sberbank
+    function GetTypeString: string;
+    procedure SetPhone(const AValue: string);
+  public
+    constructor Create; overload;
+    constructor Create(aType: TPaymentMethodType); overload;
+    function ToJSON: TJSONObject; override;
+    property PaymentMethodType: TPaymentMethodType read FPaymentMethodType write FPaymentMethodType;
+    property Phone: string read FPhone write SetPhone; // для cash и sberbank (номер телефона)
+  end;
+
   // Модель поставщика
   { TYookassaSupplier }
   TYookassaSupplier = class(TYookassaAPIObject)
@@ -72,6 +103,7 @@ type
     FInn: string;
     procedure SetPhone(const AValue: string);
   public
+    constructor Create; overload;
     constructor Create(const AName, APhone, AInn: string); overload;
     function ToJSON: TJSONObject; override;
     property Name: string read FName write FName;
@@ -190,6 +222,7 @@ type
 
 // Утилитарные функции для работы с перечислениями
 function PaymentModeToString(aPaymentMode: TPaymentMode): String;
+function PaymentMethodTypeToString(aPaymentMethodType: TPaymentMethodType): String;
 function ReceiptTypeToString(aType: TReceiptType): String;
 function SettlementTypeToString(aSettlementType: TSettlementType): String;
 function IsValidBase64(const AStr: string): Boolean;
@@ -227,6 +260,25 @@ begin
   end;
 end;
 
+function PaymentMethodTypeToString(aPaymentMethodType: TPaymentMethodType): String;
+begin
+  case aPaymentMethodType of
+    pmtBankCard:              Result:=_PAYMENT_METHOD_TYPE_BANK_CARD;
+    pmtYooMoney:              Result:=_PAYMENT_METHOD_TYPE_YOO_MONEY;
+    pmtSberbank:              Result:=_PAYMENT_METHOD_TYPE_SBERBANK;
+    pmtCash:                  Result:=_PAYMENT_METHOD_TYPE_CASH;
+    pmtTinkoffBank:           Result:=_PAYMENT_METHOD_TYPE_TINKOFF_BANK;
+    pmtSbp:                   Result:=_PAYMENT_METHOD_TYPE_SBP;
+    pmtElectronicCertificate: Result:=_PAYMENT_METHOD_TYPE_ELECTRONIC_CERTIFICATE;
+    pmtB2BSberbank:           Result:=_PAYMENT_METHOD_TYPE_B2B_SBERBANK;
+    pmtSberLoan:              Result:=_PAYMENT_METHOD_TYPE_SBER_LOAN;
+    pmtSberBnpl:              Result:=_PAYMENT_METHOD_TYPE_SBER_BNPL;
+    pmtMobileBalance:         Result:=_PAYMENT_METHOD_TYPE_MOBILE_BALANCE;
+  else
+    Result:=EmptyStr;
+  end;
+end;
+
 function ReceiptTypeToString(aType: TReceiptType): String;
 begin
   case aType of
@@ -246,6 +298,55 @@ begin
     stConsideration: Result:=_SETTLEMENT_TYPE_CONSIDERATION;
   else
     Result:=EmptyStr;
+  end;
+end;
+
+{ TYookassaPaymentMethodData }
+
+constructor TYookassaPaymentMethodData.Create;
+begin
+  inherited Create;
+  FPaymentMethodType := pmtNone;
+end;
+
+constructor TYookassaPaymentMethodData.Create(aType: TPaymentMethodType);
+begin
+  inherited Create;
+  FPaymentMethodType := aType;
+end;
+
+function TYookassaPaymentMethodData.GetTypeString: string;
+begin
+  Result := PaymentMethodTypeToString(FPaymentMethodType);
+end;
+
+procedure TYookassaPaymentMethodData.SetPhone(const AValue: string);
+var
+  aTempPhone: string;
+begin
+  aTempPhone := AValue;
+  TYookassaPhoneValidator.ValidateAndNormalizePhone(aTempPhone, 'PaymentMethodData');
+  FPhone := aTempPhone;
+end;
+
+function TYookassaPaymentMethodData.ToJSON: TJSONObject;
+begin
+  Result := TJSONObject.Create;
+  try
+    if FPaymentMethodType <> pmtNone then
+    begin
+      Result.Add(_JSON_FIELD_TYPE, GetTypeString);
+
+      // Для некоторых способов оплаты нужен номер телефона
+      case FPaymentMethodType of
+        pmtCash, pmtSberbank, pmtMobileBalance:
+          if FPhone <> EmptyStr then
+            Result.Add(_JSON_FIELD_PHONE, FPhone);
+      end;
+    end;
+  except
+    FreeAndNil(Result);
+    raise;
   end;
 end;
 
@@ -515,11 +616,16 @@ begin
   FPhone := aTempPhone;
 end;
 
+constructor TYookassaSupplier.Create;
+begin
+  inherited Create;
+end;
+
 constructor TYookassaSupplier.Create(const AName, APhone, AInn: string);
 begin
   Create;
   FName := AName;
-  FPhone := APhone;
+  Phone := APhone; // используем свойство для валидации
   FInn := AInn;
 end;
 

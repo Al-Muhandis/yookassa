@@ -129,7 +129,7 @@ end;
 procedure TTestYooKassa.FillPaymentData(aPayment: TYookassaCreatePaymentRequest);
 begin
   aPayment.Amount := 12300.55;
-  aPayment.Currency := 'RUB';
+  aPayment.CurrencyCode := 'RUB';
   aPayment.Description := 'Test payment';
   aPayment.ReturnUrl:='https://sample.com/';
 end;

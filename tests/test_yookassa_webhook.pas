@@ -260,7 +260,7 @@ begin
     AssertEquals('Payment ID should match', 'pay_test_props', aPaymentResp.ID);
     AssertEquals('Payment status should be succeeded', Ord(psSucceeded), Ord(aPaymentResp.Status));
     AssertEquals('Payment amount should match', 150.75, aPaymentResp.Amount);
-    AssertEquals('Payment currency should match', 'RUB', aPaymentResp.Currency);
+    AssertEquals('Payment currency should match', 'RUB', aPaymentResp.CurrencyCode);
     AssertEquals('Confirmation URL should match', 'https://yookassa.ru/checkout/pay/props', aPaymentResp.ConfirmationURL);
   finally
     aWebhookData.Free;
@@ -404,7 +404,7 @@ begin
 
     AssertEquals('Payment ID should be correct', 'pay_creation_test', aPaymentResp1.ID);
     AssertEquals('Payment amount should be correct', 99.99, aPaymentResp1.Amount);
-    AssertEquals('Payment currency should be correct', 'USD', aPaymentResp1.Currency);
+    AssertEquals('Payment currency should be correct', 'USD', aPaymentResp1.CurrencyCode);
   finally
     aWebhookData.Free;
   end;

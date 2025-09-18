@@ -50,7 +50,7 @@ type
   public
     property ConfirmationURL: string read GetConfirmationURL;
     property Amount: Currency read GetAmount;
-    property Currency: String read GetCurrency;
+    property CurrencyCode: String read GetCurrency;
     property Status: TPaymentStatus read GetStatus;
   end;
 

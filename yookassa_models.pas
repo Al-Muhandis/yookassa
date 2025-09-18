@@ -217,7 +217,7 @@ type
     function ToJSON: TJSONObject; override;
     property SettlementType: TSettlementType read FType write FType;
     property Amount: Currency read FAmountValue write FAmountValue;
-    property Currency: string read FAmountCurrency write FAmountCurrency;
+    property CurrencyCode: string read FAmountCurrency write FAmountCurrency;
   end;
 
 // Утилитарные функции для работы с перечислениями

@@ -3,7 +3,7 @@ program test_yookassa_api_integration_console;
 {$mode objfpc}{$H+}
 
 uses
-  Classes, consoletestrunner, test_yookassa_api_integration, yookassa_api
+  Classes, consoletestrunner, test_yookassa_api_integration
   ;
 
 type

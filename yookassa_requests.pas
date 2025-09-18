@@ -64,7 +64,7 @@ type
     destructor Destroy; override;
     function ToJSON: TJSONObject; override;
     property Amount: Currency read FAmount write FAmount;
-    property &Currency: string read FCurrency write FCurrency;
+    property CurrencyCode: string read FCurrency write FCurrency;
     property Description: string read FDescription write FDescription;
     property Receiver: TYookassaReceiver read GetReceiver;
     property ReturnUrl: string read FReturnUrl write FReturnUrl;
@@ -308,8 +308,8 @@ begin
   Result := _HTTP_METHOD_POST;
 end;
 
-class function TYookassaCreatePaymentRequest.CreatePayment(const aShopId, aSecretKey: string;
-  aAmount: Currency; const aCurrency, aDescription, aReturnUrl: string): TYookassaPaymentResponse;
+class function TYookassaCreatePaymentRequest.CreatePayment(const aShopId, aSecretKey: string; aAmount: Currency;
+  const aCurrency, aDescription, aReturnUrl: string): TYookassaPaymentResponse;
 var
   aPayment: TYookassaCreatePaymentRequest;
 begin
@@ -318,7 +318,7 @@ begin
     aPayment.ShopId := aShopId;
     aPayment.SecretKey := aSecretKey;
     aPayment.Amount := aAmount;
-    aPayment.Currency := aCurrency;
+    aPayment.CurrencyCode := aCurrency;
     aPayment.Description := aDescription;
     aPayment.ReturnUrl := aReturnUrl;
 

@@ -89,7 +89,7 @@ begin
   try
     LoadRequestConf(aPaymentRequest);
     aPaymentRequest.Amount     := aIni.ReadFloat ('order', 'Amount', 10.00);
-    aPaymentRequest.Currency   := aIni.ReadString('order', 'Currency', 'RUB');
+    aPaymentRequest.CurrencyCode   := aIni.ReadString('order', 'Currency', 'RUB');
     aPaymentRequest.Description:= aIni.ReadString('order', 'Description', 'Тест с чеком');
     aPaymentRequest.ReturnUrl  := aIni.ReadString('order', 'ReturnUrl', 'https://example.com/return');
   finally
@@ -233,9 +233,9 @@ begin
   until aPaymentResp.Status=psSucceeded;
   LoadCreateReceiptConf(FReceiptRequest);
   FReceiptRequest.Settlements.Add(TYookassaSettlement.Create(stPrepayment, FPaymentRequest.Amount,
-    FPaymentRequest.Currency));
+    FPaymentRequest.CurrencyCode));
   UpdateTestReceipt(FReceiptRequest.Receipt, FPaymentRequest.Description, FPaymentRequest.Amount,
-    FPaymentRequest.Currency);
+    FPaymentRequest.CurrencyCode);
   FReceiptRequest.PaymentId:=aPaymentID;
   FReceiptResp:=FReceiptRequest.Execute as TYookassaReceiptResponse; 
   AssertNotNull('ReceipId must be exists', FReceiptResp.ID);
@@ -255,7 +255,7 @@ begin
   aItem.Description := 'Тестовый товар';
   aItem.Quantity := 1;
   aItem.AmountValue := FPaymentRequest.Amount;
-  aItem.AmountCurrency := FPaymentRequest.Currency;
+  aItem.AmountCurrency := FPaymentRequest.CurrencyCode;
   aItem.VatCode := 1;
   aItem.PaymentMode := pmFullPrepayment;
   aItem.PaymentSubject := 'commodity';
@@ -316,7 +316,7 @@ begin
   // First, we create a payment to receive the payment_id
   LoadCreatePaymentConf(FPaymentRequest);
   UpdateTestReceipt(FReceiptRequest.Receipt, FPaymentRequest.Description, FPaymentRequest.Amount,
-    FPaymentRequest.Currency);
+    FPaymentRequest.CurrencyCode);
   FPaymentResp := FPaymentRequest.Execute as TYookassaPaymentResponse;
 
   // Getting the payment_id from the response
@@ -399,7 +399,7 @@ begin
       aItem.Description := 'Товар от самозанятого';
       aItem.Quantity := 1.0;
       aItem.AmountValue := FPaymentRequest.Amount;
-      aItem.AmountCurrency := FPaymentRequest.Currency;
+      aItem.AmountCurrency := FPaymentRequest.CurrencyCode;
       aItem.VatCode := 1; // НДС 18%
       aItem.PaymentMode := pmFullPrepayment;
       aItem.PaymentSubject := 'commodity';
